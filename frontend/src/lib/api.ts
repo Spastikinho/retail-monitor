@@ -132,10 +132,35 @@ export interface HealthCheck {
   timestamp: string;
 }
 
+export interface User {
+  id: number;
+  username: string;
+  email: string;
+}
+
+export interface AuthResponse {
+  success: boolean;
+  user?: User;
+  authenticated?: boolean;
+  error?: string;
+}
+
 // API Methods
 export const api = {
   // Health
   health: () => request<HealthCheck>('/health/'),
+
+  // Authentication
+  checkAuth: () => request<AuthResponse>('/auth/check/'),
+
+  login: (username: string, password: string) =>
+    request<AuthResponse>('/auth/login/', {
+      method: 'POST',
+      body: JSON.stringify({ username, password }),
+    }),
+
+  logout: () =>
+    request<{ success: boolean }>('/auth/logout/', { method: 'POST' }),
 
   // Products
   getProducts: (params?: { is_own?: boolean; category?: string; brand?: string; search?: string; limit?: number; offset?: number }) =>

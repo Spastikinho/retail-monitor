@@ -6,11 +6,13 @@ import json
 from datetime import timedelta
 from decimal import Decimal
 
+from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
 from django.db.models import Avg, Count, Q
 from django.http import JsonResponse
+from django.middleware.csrf import get_token
 from django.utils import timezone
-from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.csrf import csrf_exempt, ensure_csrf_cookie
 from django.views.decorators.http import require_GET, require_POST, require_http_methods
 
 
@@ -59,6 +61,81 @@ def health_check(request):
         return JsonResponse(health, status=503)
 
     return JsonResponse(health)
+
+
+# ============= Authentication API =============
+
+@ensure_csrf_cookie
+@require_GET
+def get_csrf_token(request):
+    """
+    Get CSRF token for the frontend.
+    The token is set in the cookie by ensure_csrf_cookie decorator.
+    """
+    return JsonResponse({
+        'success': True,
+        'csrfToken': get_token(request),
+    })
+
+
+@csrf_exempt
+@require_POST
+def api_login(request):
+    """
+    Login endpoint for the frontend.
+    Returns JSON response instead of redirect.
+    """
+    try:
+        body = json.loads(request.body) if request.body else {}
+    except json.JSONDecodeError:
+        return api_error('Invalid JSON body')
+
+    username = body.get('username')
+    password = body.get('password')
+
+    if not username or not password:
+        return api_error('Username and password are required')
+
+    user = authenticate(request, username=username, password=password)
+
+    if user is not None:
+        login(request, user)
+        return JsonResponse({
+            'success': True,
+            'user': {
+                'id': user.id,
+                'username': user.username,
+                'email': user.email,
+            }
+        })
+    else:
+        return api_error('Invalid credentials', 401)
+
+
+@require_POST
+def api_logout(request):
+    """Logout endpoint for the frontend."""
+    logout(request)
+    return JsonResponse({'success': True})
+
+
+@require_GET
+def check_auth(request):
+    """Check if user is authenticated."""
+    if request.user.is_authenticated:
+        return JsonResponse({
+            'success': True,
+            'authenticated': True,
+            'user': {
+                'id': request.user.id,
+                'username': request.user.username,
+                'email': request.user.email,
+            }
+        })
+    return JsonResponse({
+        'success': True,
+        'authenticated': False,
+    })
 
 
 # ============= Products API =============

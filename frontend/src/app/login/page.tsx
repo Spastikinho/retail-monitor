@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { LogIn } from 'lucide-react';
 import { Button } from '@/components/Button';
+import { api } from '@/lib/api';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -18,24 +19,11 @@ export default function LoginPage() {
     setIsLoading(true);
 
     try {
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || '';
-      const response = await fetch(`${apiUrl}/accounts/login/`, {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-        },
-        body: new URLSearchParams({
-          username,
-          password,
-          next: '/',
-        }),
-      });
-
-      if (response.ok || response.redirected) {
+      const response = await api.login(username, password);
+      if (response.success) {
         router.push('/');
       } else {
-        setError('Invalid username or password');
+        setError(response.error || 'Invalid username or password');
       }
     } catch (err) {
       setError('Login failed. Please try again.');

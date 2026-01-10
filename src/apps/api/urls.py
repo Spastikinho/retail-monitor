@@ -11,6 +11,12 @@ urlpatterns = [
     # Health Check
     path('health/', views.health_check, name='health_check'),
 
+    # Authentication
+    path('auth/csrf/', views.get_csrf_token, name='get_csrf_token'),
+    path('auth/login/', views.api_login, name='api_login'),
+    path('auth/logout/', views.api_logout, name='api_logout'),
+    path('auth/check/', views.check_auth, name='check_auth'),
+
     # Products
     path('products/', views.products_list, name='products_list'),
     path('products/<uuid:product_id>/', views.product_detail, name='product_detail'),

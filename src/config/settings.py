@@ -167,11 +167,13 @@ CACHES = {
 SESSION_ENGINE = 'django.contrib.sessions.backends.cached_db'
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SECURE = not DEBUG
-SESSION_COOKIE_SAMESITE = 'Lax'
+# Use 'None' for cross-site requests (Vercel frontend → Railway backend)
+SESSION_COOKIE_SAMESITE = 'None' if not DEBUG else 'Lax'
 
 # CSRF
-CSRF_COOKIE_HTTPONLY = True
+CSRF_COOKIE_HTTPONLY = False  # Allow JS to read CSRF token
 CSRF_COOKIE_SECURE = not DEBUG
+CSRF_COOKIE_SAMESITE = 'None' if not DEBUG else 'Lax'
 
 # Security headers (for production)
 if not DEBUG:

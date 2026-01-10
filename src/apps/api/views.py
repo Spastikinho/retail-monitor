@@ -703,7 +703,12 @@ def import_urls(request):
         user = request.user if request.user.is_authenticated else User.objects.first()
 
         if not user:
-            return api_error('No user available for import', 500)
+            # Auto-create a default user for API imports
+            user = User.objects.create_user(
+                username='api_user',
+                email='api@retailmonitor.local',
+                password=User.objects.make_random_password()
+            )
 
         created_imports = []
         errors = []

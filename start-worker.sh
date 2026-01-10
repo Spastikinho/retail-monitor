@@ -36,5 +36,5 @@ else:
 "
 
 echo "Starting Celery Worker..."
-# Start celery worker
-exec celery -A config worker --loglevel=info --concurrency=2
+# Start celery worker - listen to all queues (celery, scraping, analytics, alerts)
+exec celery -A config worker --loglevel=info --concurrency=2 -Q celery,scraping,analytics,alerts

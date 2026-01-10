@@ -152,51 +152,54 @@ def products_list(request):
         - limit: Max results (default 50)
         - offset: Pagination offset
     """
-    from apps.products.models import Product
+    try:
+        from apps.products.models import Product
 
-    products = Product.objects.filter(is_active=True)
+        products = Product.objects.filter(is_active=True)
 
-    # Apply filters
-    if request.GET.get('is_own'):
-        is_own = request.GET.get('is_own').lower() == 'true'
-        products = products.filter(is_own=is_own)
+        # Apply filters
+        if request.GET.get('is_own'):
+            is_own = request.GET.get('is_own').lower() == 'true'
+            products = products.filter(is_own=is_own)
 
-    if request.GET.get('category'):
-        products = products.filter(category_id=request.GET.get('category'))
+        if request.GET.get('category'):
+            products = products.filter(category_id=request.GET.get('category'))
 
-    if request.GET.get('brand'):
-        products = products.filter(brand__icontains=request.GET.get('brand'))
+        if request.GET.get('brand'):
+            products = products.filter(brand__icontains=request.GET.get('brand'))
 
-    if request.GET.get('search'):
-        products = products.filter(name__icontains=request.GET.get('search'))
+        if request.GET.get('search'):
+            products = products.filter(name__icontains=request.GET.get('search'))
 
-    # Pagination
-    limit = min(int(request.GET.get('limit', 50)), 100)
-    offset = int(request.GET.get('offset', 0))
+        # Pagination
+        limit = min(int(request.GET.get('limit', 50)), 100)
+        offset = int(request.GET.get('offset', 0))
 
-    total = products.count()
-    products = products.order_by('-created_at')[offset:offset + limit]
+        total = products.count()
+        products = products.order_by('-created_at')[offset:offset + limit]
 
-    data = {
-        'success': True,
-        'total': total,
-        'limit': limit,
-        'offset': offset,
-        'products': [
-            {
-                'id': str(p.id),
-                'name': p.name,
-                'brand': p.brand,
-                'sku': p.sku,
-                'is_own': p.is_own,
-                'category': p.category.name if p.category else None,
-                'created_at': p.created_at.isoformat(),
-            }
-            for p in products
-        ]
-    }
+        data = {
+            'success': True,
+            'total': total,
+            'limit': limit,
+            'offset': offset,
+            'products': [
+                {
+                    'id': str(p.id),
+                    'name': p.name,
+                    'brand': p.brand or '',
+                    'sku': p.sku or '',
+                    'is_own': p.is_own,
+                    'category': p.category.name if p.category else None,
+                    'created_at': p.created_at.isoformat() if p.created_at else None,
+                }
+                for p in products
+            ]
+        }
 
-    return json_response(data)
+        return json_response(data)
+    except Exception as e:
+        return api_error(f'Error fetching products: {str(e)}', 500)
 
 
 @require_GET
@@ -260,24 +263,27 @@ def product_detail(request, product_id):
 @require_GET
 def retailers_list(request):
     """List all active retailers."""
-    from apps.retailers.models import Retailer
+    try:
+        from apps.retailers.models import Retailer
 
-    retailers = Retailer.objects.filter(is_active=True)
+        retailers = Retailer.objects.filter(is_active=True)
 
-    data = {
-        'success': True,
-        'retailers': [
-            {
-                'id': str(r.id),
-                'name': r.name,
-                'code': r.code,
-                'website': r.website,
-            }
-            for r in retailers
-        ]
-    }
+        data = {
+            'success': True,
+            'retailers': [
+                {
+                    'id': str(r.id),
+                    'name': r.name,
+                    'code': r.code,
+                    'website': r.website,
+                }
+                for r in retailers
+            ]
+        }
 
-    return json_response(data)
+        return json_response(data)
+    except Exception as e:
+        return api_error(f'Error fetching retailers: {str(e)}', 500)
 
 
 # ============= Price History API =============
@@ -392,42 +398,45 @@ def alerts_list(request):
         - delivered: Filter by delivery status (true/false)
         - limit: Max results (default 50)
     """
-    from apps.alerts.models import AlertEvent
+    try:
+        from apps.alerts.models import AlertEvent
 
-    days = int(request.GET.get('days', 7))
-    since = timezone.now() - timedelta(days=days)
+        days = int(request.GET.get('days', 7))
+        since = timezone.now() - timedelta(days=days)
 
-    events = AlertEvent.objects.filter(
-        triggered_at__gte=since,
-    ).select_related('alert_rule', 'listing__product', 'listing__retailer')
+        events = AlertEvent.objects.filter(
+            triggered_at__gte=since,
+        ).select_related('alert_rule', 'listing__product', 'listing__retailer')
 
-    if request.GET.get('delivered'):
-        is_delivered = request.GET.get('delivered').lower() == 'true'
-        events = events.filter(is_delivered=is_delivered)
+        if request.GET.get('delivered'):
+            is_delivered = request.GET.get('delivered').lower() == 'true'
+            events = events.filter(is_delivered=is_delivered)
 
-    limit = min(int(request.GET.get('limit', 50)), 100)
-    events = events.order_by('-triggered_at')[:limit]
+        limit = min(int(request.GET.get('limit', 50)), 100)
+        events = events.order_by('-triggered_at')[:limit]
 
-    data = {
-        'success': True,
-        'events': [
-            {
-                'id': str(e.id),
-                'rule_name': e.alert_rule.name,
-                'alert_type': e.alert_rule.alert_type,
-                'product': e.listing.product.name,
-                'retailer': e.listing.retailer.name,
-                'message': e.message,
-                'details': e.details,
-                'triggered_at': e.triggered_at.isoformat(),
-                'is_delivered': e.is_delivered,
-                'delivered_at': e.delivered_at.isoformat() if e.delivered_at else None,
-            }
-            for e in events
-        ]
-    }
+        data = {
+            'success': True,
+            'events': [
+                {
+                    'id': str(e.id),
+                    'rule_name': e.alert_rule.name,
+                    'alert_type': e.alert_rule.alert_type,
+                    'product': e.listing.product.name,
+                    'retailer': e.listing.retailer.name,
+                    'message': e.message,
+                    'details': e.details,
+                    'triggered_at': e.triggered_at.isoformat(),
+                    'is_delivered': e.is_delivered,
+                    'delivered_at': e.delivered_at.isoformat() if e.delivered_at else None,
+                }
+                for e in events
+            ]
+        }
 
-    return json_response(data)
+        return json_response(data)
+    except Exception as e:
+        return api_error(f'Error fetching alerts: {str(e)}', 500)
 
 
 # ============= Analytics API =============
@@ -437,51 +446,53 @@ def analytics_summary(request):
     """
     Get analytics summary for dashboard.
     """
-    from apps.products.models import Product, Listing
-    from apps.scraping.models import SnapshotPrice, ReviewItem, ScrapeSession
-    from apps.alerts.models import AlertEvent
+    try:
+        from apps.products.models import Product, Listing
+        from apps.scraping.models import SnapshotPrice, ReviewItem, ScrapeSession
+        from apps.alerts.models import AlertEvent
 
-    today = timezone.now().date()
-    week_ago = timezone.now() - timedelta(days=7)
+        week_ago = timezone.now() - timedelta(days=7)
 
-    # Product counts
-    total_products = Product.objects.filter(is_active=True).count()
-    own_products = Product.objects.filter(is_active=True, is_own=True).count()
-    competitor_products = total_products - own_products
+        # Product counts
+        total_products = Product.objects.filter(is_active=True).count()
+        own_products = Product.objects.filter(is_active=True, is_own=True).count()
+        competitor_products = total_products - own_products
 
-    # Listing counts
-    total_listings = Listing.objects.filter(is_active=True).count()
+        # Listing counts
+        total_listings = Listing.objects.filter(is_active=True).count()
 
-    # Recent activity
-    recent_snapshots = SnapshotPrice.objects.filter(scraped_at__gte=week_ago).count()
-    recent_reviews = ReviewItem.objects.filter(created_at__gte=week_ago).count()
-    recent_alerts = AlertEvent.objects.filter(triggered_at__gte=week_ago).count()
+        # Recent activity
+        recent_snapshots = SnapshotPrice.objects.filter(scraped_at__gte=week_ago).count()
+        recent_reviews = ReviewItem.objects.filter(created_at__gte=week_ago).count()
+        recent_alerts = AlertEvent.objects.filter(triggered_at__gte=week_ago).count()
 
-    # Session stats
-    recent_sessions = ScrapeSession.objects.filter(
-        started_at__gte=week_ago,
-        status=ScrapeSession.StatusChoices.COMPLETED,
-    ).count()
+        # Session stats
+        recent_sessions = ScrapeSession.objects.filter(
+            started_at__gte=week_ago,
+            status=ScrapeSession.StatusChoices.COMPLETED,
+        ).count()
 
-    data = {
-        'success': True,
-        'summary': {
-            'products': {
-                'total': total_products,
-                'own': own_products,
-                'competitors': competitor_products,
-            },
-            'listings': total_listings,
-            'recent_activity': {
-                'snapshots_7d': recent_snapshots,
-                'reviews_7d': recent_reviews,
-                'alerts_7d': recent_alerts,
-                'sessions_7d': recent_sessions,
+        data = {
+            'success': True,
+            'summary': {
+                'products': {
+                    'total': total_products,
+                    'own': own_products,
+                    'competitors': competitor_products,
+                },
+                'listings': total_listings,
+                'recent_activity': {
+                    'snapshots_7d': recent_snapshots,
+                    'reviews_7d': recent_reviews,
+                    'alerts_7d': recent_alerts,
+                    'sessions_7d': recent_sessions,
+                }
             }
         }
-    }
 
-    return json_response(data)
+        return json_response(data)
+    except Exception as e:
+        return api_error(f'Error fetching analytics: {str(e)}', 500)
 
 
 # ============= Scraping Control API =============

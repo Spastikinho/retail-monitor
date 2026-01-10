@@ -32,6 +32,35 @@ def api_error(message, status=400):
     return JsonResponse({'error': message, 'success': False}, status=status)
 
 
+# ============= Health Check =============
+
+@require_GET
+def health_check(request):
+    """
+    Health check endpoint for Railway deployment.
+    Returns 200 if the service is healthy.
+    """
+    from django.db import connection
+
+    health = {
+        'status': 'healthy',
+        'database': 'ok',
+        'timestamp': timezone.now().isoformat(),
+    }
+
+    # Check database connection
+    try:
+        with connection.cursor() as cursor:
+            cursor.execute('SELECT 1')
+        health['database'] = 'ok'
+    except Exception as e:
+        health['status'] = 'unhealthy'
+        health['database'] = str(e)
+        return JsonResponse(health, status=503)
+
+    return JsonResponse(health)
+
+
 # ============= Products API =============
 
 @require_GET

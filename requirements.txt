@@ -16,6 +16,13 @@ redis>=5.0.1
 
 # Web server
 gunicorn>=21.2.0
+whitenoise>=6.6.0
+
+# CORS
+django-cors-headers>=4.3.1
+
+# REST API
+djangorestframework>=3.14.0
 
 # Browser automation
 playwright>=1.40.0

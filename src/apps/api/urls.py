@@ -8,6 +8,9 @@ from . import views
 app_name = 'api'
 
 urlpatterns = [
+    # Health Check
+    path('health/', views.health_check, name='health_check'),
+
     # Products
     path('products/', views.products_list, name='products_list'),
     path('products/<uuid:product_id>/', views.product_detail, name='product_detail'),

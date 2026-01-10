@@ -112,11 +112,18 @@ USE_TZ = True
 
 # Static files (CSS, JavaScript, Images)
 STATIC_URL = '/static/'
-STATIC_ROOT = BASE_DIR.parent / 'staticfiles'
-STATICFILES_DIRS = [BASE_DIR / 'static'] if (BASE_DIR / 'static').exists() else []
+STATIC_ROOT = BASE_DIR / 'staticfiles'
+
+# Only add STATICFILES_DIRS if the directory exists and is not the same as STATIC_ROOT
+_static_dir = BASE_DIR / 'static'
+if _static_dir.exists() and _static_dir != STATIC_ROOT:
+    STATICFILES_DIRS = [_static_dir]
+else:
+    STATICFILES_DIRS = []
 
 # WhiteNoise for static files in production
-STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
+if not DEBUG:
+    STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 
 # Media files
 MEDIA_URL = '/media/'
@@ -203,10 +210,7 @@ RAW_SNAPSHOTS_DIR = DATA_DIR / 'raw_snapshots'
 EXPORTS_DIR = DATA_DIR / 'exports'
 IMPORTS_DIR = DATA_DIR / 'imports'
 
-# Logging
-LOG_DIR = BASE_DIR.parent / 'logs'
-LOG_DIR.mkdir(exist_ok=True)
-
+# Logging - Use console only for cloud deployments (Railway, etc.)
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
@@ -219,85 +223,45 @@ LOGGING = {
             'format': '{levelname} {asctime} {module} {message}',
             'style': '{',
         },
-        'json': {
-            'format': '{"level": "%(levelname)s", "time": "%(asctime)s", "name": "%(name)s", "module": "%(module)s", "message": "%(message)s"}',
-        },
-    },
-    'filters': {
-        'require_debug_false': {
-            '()': 'django.utils.log.RequireDebugFalse',
-        },
-        'require_debug_true': {
-            '()': 'django.utils.log.RequireDebugTrue',
-        },
     },
     'handlers': {
         'console': {
             'class': 'logging.StreamHandler',
             'formatter': 'simple',
         },
-        'file_app': {
-            'class': 'logging.handlers.RotatingFileHandler',
-            'filename': LOG_DIR / 'app.log',
-            'maxBytes': 10 * 1024 * 1024,  # 10 MB
-            'backupCount': 5,
-            'formatter': 'verbose',
-        },
-        'file_error': {
-            'class': 'logging.handlers.RotatingFileHandler',
-            'filename': LOG_DIR / 'error.log',
-            'maxBytes': 10 * 1024 * 1024,  # 10 MB
-            'backupCount': 5,
-            'formatter': 'verbose',
-            'level': 'ERROR',
-        },
-        'file_scraping': {
-            'class': 'logging.handlers.RotatingFileHandler',
-            'filename': LOG_DIR / 'scraping.log',
-            'maxBytes': 10 * 1024 * 1024,  # 10 MB
-            'backupCount': 10,
-            'formatter': 'verbose',
-        },
-        'file_alerts': {
-            'class': 'logging.handlers.RotatingFileHandler',
-            'filename': LOG_DIR / 'alerts.log',
-            'maxBytes': 5 * 1024 * 1024,  # 5 MB
-            'backupCount': 5,
-            'formatter': 'verbose',
-        },
     },
     'root': {
-        'handlers': ['console', 'file_app', 'file_error'],
+        'handlers': ['console'],
         'level': 'INFO',
     },
     'loggers': {
         'django': {
-            'handlers': ['console', 'file_app'],
+            'handlers': ['console'],
             'level': env('DJANGO_LOG_LEVEL', default='INFO'),
             'propagate': False,
         },
         'django.request': {
-            'handlers': ['console', 'file_error'],
+            'handlers': ['console'],
             'level': 'ERROR',
             'propagate': False,
         },
         'apps': {
-            'handlers': ['console', 'file_app'],
+            'handlers': ['console'],
             'level': 'DEBUG' if DEBUG else 'INFO',
             'propagate': False,
         },
         'apps.scraping': {
-            'handlers': ['console', 'file_scraping'],
+            'handlers': ['console'],
             'level': 'DEBUG' if DEBUG else 'INFO',
             'propagate': False,
         },
         'apps.alerts': {
-            'handlers': ['console', 'file_alerts'],
+            'handlers': ['console'],
             'level': 'DEBUG' if DEBUG else 'INFO',
             'propagate': False,
         },
         'celery': {
-            'handlers': ['console', 'file_app'],
+            'handlers': ['console'],
             'level': 'INFO',
             'propagate': False,
         },

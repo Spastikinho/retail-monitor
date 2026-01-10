@@ -146,7 +146,6 @@ def products_list(request):
 
     Query params:
         - is_own: Filter by own products (true/false)
-        - category: Filter by category ID
         - brand: Filter by brand name
         - search: Search in name
         - limit: Max results (default 50)
@@ -155,15 +154,12 @@ def products_list(request):
     try:
         from apps.products.models import Product
 
-        products = Product.objects.filter(is_active=True)
+        products = Product.objects.all()
 
         # Apply filters
         if request.GET.get('is_own'):
             is_own = request.GET.get('is_own').lower() == 'true'
             products = products.filter(is_own=is_own)
-
-        if request.GET.get('category'):
-            products = products.filter(category_id=request.GET.get('category'))
 
         if request.GET.get('brand'):
             products = products.filter(brand__icontains=request.GET.get('brand'))
@@ -188,9 +184,9 @@ def products_list(request):
                     'id': str(p.id),
                     'name': p.name,
                     'brand': p.brand or '',
-                    'sku': p.sku or '',
+                    'sku': '',  # Product model doesn't have sku
                     'is_own': p.is_own,
-                    'category': p.category.name if p.category else None,
+                    'category': None,  # Product model doesn't have category
                     'created_at': p.created_at.isoformat() if p.created_at else None,
                 }
                 for p in products
@@ -207,55 +203,58 @@ def product_detail(request, product_id):
     """
     Get detailed product info including listings and latest prices.
     """
-    from apps.products.models import Product, Listing
-    from apps.scraping.models import SnapshotPrice
-
     try:
-        product = Product.objects.get(pk=product_id, is_active=True)
-    except Product.DoesNotExist:
-        return api_error('Product not found', 404)
+        from apps.products.models import Product, Listing
+        from apps.scraping.models import SnapshotPrice
 
-    listings = Listing.objects.filter(product=product, is_active=True)
+        try:
+            product = Product.objects.get(pk=product_id)
+        except Product.DoesNotExist:
+            return api_error('Product not found', 404)
 
-    listings_data = []
-    for listing in listings:
-        # Get latest snapshot
-        latest_snapshot = SnapshotPrice.objects.filter(
-            listing=listing
-        ).order_by('-scraped_at').first()
+        listings = Listing.objects.filter(product=product, is_active=True)
 
-        listings_data.append({
-            'id': str(listing.id),
-            'retailer': listing.retailer.name,
-            'external_url': listing.external_url,
-            'last_scraped': listing.last_scraped_at.isoformat() if listing.last_scraped_at else None,
-            'latest_price': {
-                'price_final': latest_snapshot.price_final,
-                'price_regular': latest_snapshot.price_regular,
-                'in_stock': latest_snapshot.in_stock,
-                'rating_avg': latest_snapshot.rating_avg,
-                'reviews_count': latest_snapshot.reviews_count,
-                'scraped_at': latest_snapshot.scraped_at.isoformat(),
-            } if latest_snapshot else None,
-        })
+        listings_data = []
+        for listing in listings:
+            # Get latest snapshot
+            latest_snapshot = SnapshotPrice.objects.filter(
+                listing=listing
+            ).order_by('-scraped_at').first()
 
-    data = {
-        'success': True,
-        'product': {
-            'id': str(product.id),
-            'name': product.name,
-            'brand': product.brand,
-            'sku': product.sku,
-            'barcode': product.barcode,
-            'is_own': product.is_own,
-            'category': product.category.name if product.category else None,
-            'description': product.description,
-            'created_at': product.created_at.isoformat(),
-        },
-        'listings': listings_data,
-    }
+            listings_data.append({
+                'id': str(listing.id),
+                'retailer': listing.retailer.name,
+                'external_url': listing.external_url,
+                'last_scraped': listing.last_scraped_at.isoformat() if listing.last_scraped_at else None,
+                'latest_price': {
+                    'price_final': latest_snapshot.price_final,
+                    'price_regular': latest_snapshot.price_regular,
+                    'in_stock': latest_snapshot.in_stock,
+                    'rating_avg': latest_snapshot.rating_avg,
+                    'reviews_count': latest_snapshot.reviews_count,
+                    'scraped_at': latest_snapshot.scraped_at.isoformat(),
+                } if latest_snapshot else None,
+            })
 
-    return json_response(data)
+        data = {
+            'success': True,
+            'product': {
+                'id': str(product.id),
+                'name': product.name,
+                'brand': product.brand,
+                'sku': '',  # Not in model
+                'barcode': '',  # Not in model
+                'is_own': product.is_own,
+                'category': None,  # Not in model
+                'description': product.notes,  # Use notes as description
+                'created_at': product.created_at.isoformat(),
+            },
+            'listings': listings_data,
+        }
+
+        return json_response(data)
+    except Exception as e:
+        return api_error(f'Error fetching product: {str(e)}', 500)
 
 
 # ============= Retailers API =============
@@ -274,8 +273,8 @@ def retailers_list(request):
                 {
                     'id': str(r.id),
                     'name': r.name,
-                    'code': r.code,
-                    'website': r.website,
+                    'code': r.slug,  # Use slug as code
+                    'website': r.base_url,  # Use base_url as website
                 }
                 for r in retailers
             ]
@@ -453,9 +452,9 @@ def analytics_summary(request):
 
         week_ago = timezone.now() - timedelta(days=7)
 
-        # Product counts
-        total_products = Product.objects.filter(is_active=True).count()
-        own_products = Product.objects.filter(is_active=True, is_own=True).count()
+        # Product counts (Product doesn't have is_active field)
+        total_products = Product.objects.count()
+        own_products = Product.objects.filter(is_own=True).count()
         competitor_products = total_products - own_products
 
         # Listing counts
@@ -600,53 +599,55 @@ def export_products(request):
         - format: json (default) or csv
         - is_own: Filter by own products
     """
-    from apps.products.models import Product, Listing
-    from apps.scraping.models import SnapshotPrice
-    from django.db.models import OuterRef, Subquery
+    try:
+        from apps.products.models import Product, Listing
+        from apps.scraping.models import SnapshotPrice
 
-    products = Product.objects.filter(is_active=True)
+        products = Product.objects.all()
 
-    if request.GET.get('is_own'):
-        is_own = request.GET.get('is_own').lower() == 'true'
-        products = products.filter(is_own=is_own)
+        if request.GET.get('is_own'):
+            is_own = request.GET.get('is_own').lower() == 'true'
+            products = products.filter(is_own=is_own)
 
-    export_data = []
+        export_data = []
 
-    for product in products:
-        listings = Listing.objects.filter(product=product, is_active=True)
+        for product in products:
+            listings = Listing.objects.filter(product=product, is_active=True)
 
-        product_data = {
-            'name': product.name,
-            'brand': product.brand,
-            'sku': product.sku,
-            'barcode': product.barcode,
-            'is_own': product.is_own,
-            'category': product.category.name if product.category else None,
-            'prices': [],
-        }
+            product_data = {
+                'name': product.name,
+                'brand': product.brand,
+                'sku': '',  # Not in model
+                'barcode': '',  # Not in model
+                'is_own': product.is_own,
+                'category': None,  # Not in model
+                'prices': [],
+            }
 
-        for listing in listings:
-            latest = SnapshotPrice.objects.filter(
-                listing=listing
-            ).order_by('-scraped_at').first()
+            for listing in listings:
+                latest = SnapshotPrice.objects.filter(
+                    listing=listing
+                ).order_by('-scraped_at').first()
 
-            if latest:
-                product_data['prices'].append({
-                    'retailer': listing.retailer.name,
-                    'url': listing.external_url,
-                    'price_final': float(latest.price_final) if latest.price_final else None,
-                    'price_regular': float(latest.price_regular) if latest.price_regular else None,
-                    'in_stock': latest.in_stock,
-                    'rating': latest.rating_avg,
-                    'reviews_count': latest.reviews_count,
-                    'scraped_at': latest.scraped_at.isoformat(),
-                })
+                if latest:
+                    product_data['prices'].append({
+                        'retailer': listing.retailer.name,
+                        'url': listing.external_url,
+                        'price_final': float(latest.price_final) if latest.price_final else None,
+                        'price_regular': float(latest.price_regular) if latest.price_regular else None,
+                        'in_stock': latest.in_stock,
+                        'rating': latest.rating_avg,
+                        'reviews_count': latest.reviews_count,
+                        'scraped_at': latest.scraped_at.isoformat(),
+                    })
 
-        export_data.append(product_data)
+            export_data.append(product_data)
 
-    return json_response({
-        'success': True,
-        'exported_at': timezone.now().isoformat(),
-        'product_count': len(export_data),
-        'products': export_data,
-    })
+        return json_response({
+            'success': True,
+            'exported_at': timezone.now().isoformat(),
+            'product_count': len(export_data),
+            'products': export_data,
+        })
+    except Exception as e:
+        return api_error(f'Error exporting products: {str(e)}', 500)

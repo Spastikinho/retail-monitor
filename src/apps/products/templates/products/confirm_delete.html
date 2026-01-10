@@ -1,0 +1,29 @@
+{% extends 'base.html' %}
+
+{% block title %}Удалить товар — Retail Monitor{% endblock %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header bg-danger text-white">
+                <h5 class="card-title mb-0"><i class="bi bi-exclamation-triangle me-2"></i>Удаление товара</h5>
+            </div>
+            <div class="card-body">
+                <p>Вы уверены, что хотите удалить товар <strong>{{ object.name }}</strong>?</p>
+                <p class="text-muted">Будут удалены все связанные листинги, снимки цен и отзывы.</p>
+
+                <form method="post">
+                    {% csrf_token %}
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-danger">
+                            <i class="bi bi-trash me-1"></i> Да, удалить
+                        </button>
+                        <a href="{% url 'products:detail' pk=object.pk %}" class="btn btn-outline-secondary">Отмена</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,128 @@
+{% extends 'base.html' %}
+
+{% block title %}Отзыв — {{ review.listing.product.name }} — Retail Monitor{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{% url 'scraping:reviews_list' %}">Отзывы</a></li>
+        <li class="breadcrumb-item"><a href="{% url 'products:detail' pk=review.listing.product.pk %}">{{ review.listing.product.name|truncatewords:5 }}</a></li>
+        <li class="breadcrumb-item active">Отзыв</li>
+    </ol>
+</nav>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <div>
+                    {% for i in "12345" %}
+                        {% if forloop.counter <= review.rating %}
+                        <i class="bi bi-star-fill text-warning fs-4"></i>
+                        {% else %}
+                        <i class="bi bi-star text-muted fs-4"></i>
+                        {% endif %}
+                    {% endfor %}
+
+                    {% if review.sentiment == 'negative' %}
+                    <span class="badge bg-danger ms-2">Негативный</span>
+                    {% elif review.sentiment == 'neutral' %}
+                    <span class="badge bg-warning text-dark ms-2">Нейтральный</span>
+                    {% else %}
+                    <span class="badge bg-success ms-2">Позитивный</span>
+                    {% endif %}
+                </div>
+                <div class="text-muted">
+                    {% if review.author_name %}{{ review.author_name }} &middot; {% endif %}
+                    {% if review.published_at %}{{ review.published_at|date:"d.m.Y" }}{% endif %}
+                </div>
+            </div>
+            <div class="card-body">
+                <p class="lead">{{ review.text }}</p>
+
+                {% if review.pros %}
+                <div class="alert alert-success">
+                    <h6 class="alert-heading"><i class="bi bi-plus-circle me-1"></i> Достоинства</h6>
+                    <p class="mb-0">{{ review.pros }}</p>
+                </div>
+                {% endif %}
+
+                {% if review.cons %}
+                <div class="alert alert-danger">
+                    <h6 class="alert-heading"><i class="bi bi-dash-circle me-1"></i> Недостатки</h6>
+                    <p class="mb-0">{{ review.cons }}</p>
+                </div>
+                {% endif %}
+
+                {% if review.topics %}
+                <div class="mt-3">
+                    <strong>Темы:</strong>
+                    {% for topic in review.topics %}
+                    <span class="badge bg-primary me-1">{{ topic }}</span>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Информация</h5>
+            </div>
+            <div class="card-body">
+                <dl class="mb-0">
+                    <dt>Товар</dt>
+                    <dd>
+                        <a href="{% url 'products:detail' pk=review.listing.product.pk %}">
+                            {{ review.listing.product.name }}
+                        </a>
+                        {% if review.listing.product.is_own %}
+                        <span class="badge bg-success ms-1">Наш</span>
+                        {% else %}
+                        <span class="badge bg-secondary ms-1">Конкурент</span>
+                        {% endif %}
+                    </dd>
+
+                    <dt>Ретейлер</dt>
+                    <dd>{{ review.listing.retailer.name }}</dd>
+
+                    <dt>Источник</dt>
+                    <dd>
+                        <a href="{{ review.listing.external_url }}" target="_blank" class="text-decoration-none">
+                            Открыть на сайте <i class="bi bi-box-arrow-up-right"></i>
+                        </a>
+                    </dd>
+
+                    <dt>ID отзыва</dt>
+                    <dd><code>{{ review.external_id }}</code></dd>
+
+                    <dt>Собран</dt>
+                    <dd>{{ review.scraped_at|date:"d.m.Y H:i" }}</dd>
+
+                    <dt>Обработан AI</dt>
+                    <dd>
+                        {% if review.is_processed %}
+                        <span class="badge bg-success">Да</span>
+                        {% else %}
+                        <span class="badge bg-warning text-dark">Нет</span>
+                        {% endif %}
+                    </dd>
+                </dl>
+            </div>
+        </div>
+
+        {% if review.raw_data %}
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Сырые данные</h5>
+            </div>
+            <div class="card-body">
+                <pre class="mb-0 small" style="max-height: 300px; overflow: auto;">{{ review.raw_data|pprint }}</pre>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

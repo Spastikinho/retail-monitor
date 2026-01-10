@@ -1,0 +1,175 @@
+{% extends 'base.html' %}
+
+{% block title %}Событие оповещения — Retail Monitor{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{% url 'alerts:rule_list' %}">Оповещения</a></li>
+        <li class="breadcrumb-item"><a href="{% url 'alerts:event_list' %}">События</a></li>
+        <li class="breadcrumb-item active">Событие</li>
+    </ol>
+</nav>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">
+                    {% if event.alert_rule.alert_type == 'price_increase' %}
+                    <span class="badge bg-danger me-2">📈</span>
+                    {% elif event.alert_rule.alert_type == 'price_decrease' %}
+                    <span class="badge bg-success me-2">📉</span>
+                    {% elif event.alert_rule.alert_type == 'new_negative_review' %}
+                    <span class="badge bg-warning text-dark me-2">😡</span>
+                    {% elif event.alert_rule.alert_type == 'out_of_stock' %}
+                    <span class="badge bg-secondary me-2">❌</span>
+                    {% else %}
+                    <span class="badge bg-info me-2">🔔</span>
+                    {% endif %}
+                    {{ event.alert_rule.get_alert_type_display }}
+                </h5>
+                <span class="text-muted">{{ event.triggered_at|date:"d.m.Y H:i:s" }}</span>
+            </div>
+            <div class="card-body">
+                <h4>{{ event.listing.product.name }}</h4>
+                <p class="text-muted mb-3">{{ event.listing.retailer.name }}</p>
+
+                <div class="alert alert-secondary">
+                    {{ event.message }}
+                </div>
+
+                {% if event.details %}
+                <h6 class="mt-4">Детали</h6>
+                <table class="table table-sm">
+                    <tbody>
+                        {% if event.details.old_price %}
+                        <tr>
+                            <th>Старая цена</th>
+                            <td>{{ event.details.old_price }} ₽</td>
+                        </tr>
+                        {% endif %}
+                        {% if event.details.new_price %}
+                        <tr>
+                            <th>Новая цена</th>
+                            <td>{{ event.details.new_price }} ₽</td>
+                        </tr>
+                        {% endif %}
+                        {% if event.details.pct_change %}
+                        <tr>
+                            <th>Изменение</th>
+                            <td>{% if event.details.pct_change > 0 %}+{% endif %}{{ event.details.pct_change|floatformat:1 }}%</td>
+                        </tr>
+                        {% endif %}
+                        {% if event.details.rating %}
+                        <tr>
+                            <th>Рейтинг отзыва</th>
+                            <td>
+                                {% for i in "12345" %}
+                                    {% if forloop.counter <= event.details.rating %}
+                                    <i class="bi bi-star-fill text-warning"></i>
+                                    {% else %}
+                                    <i class="bi bi-star text-muted"></i>
+                                    {% endif %}
+                                {% endfor %}
+                            </td>
+                        </tr>
+                        {% endif %}
+                        {% if event.details.author %}
+                        <tr>
+                            <th>Автор</th>
+                            <td>{{ event.details.author }}</td>
+                        </tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+
+                {% if event.details.review_text %}
+                <h6 class="mt-4">Текст отзыва</h6>
+                <blockquote class="blockquote">
+                    <p class="small">{{ event.details.review_text }}</p>
+                </blockquote>
+                {% endif %}
+
+                {% if event.details.pros %}
+                <div class="alert alert-success">
+                    <strong>Достоинства:</strong> {{ event.details.pros }}
+                </div>
+                {% endif %}
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <!-- Delivery Status -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Статус доставки</h5>
+            </div>
+            <div class="card-body">
+                {% if event.is_delivered %}
+                <div class="text-center py-3">
+                    <i class="bi bi-check-circle-fill text-success fs-1"></i>
+                    <p class="mt-2 mb-0 text-success">Доставлено</p>
+                    {% if event.delivered_at %}
+                    <small class="text-muted">{{ event.delivered_at|date:"d.m.Y H:i:s" }}</small>
+                    {% endif %}
+                </div>
+                {% elif event.delivery_error %}
+                <div class="text-center py-3">
+                    <i class="bi bi-x-circle-fill text-danger fs-1"></i>
+                    <p class="mt-2 mb-0 text-danger">Ошибка доставки</p>
+                    <small class="text-muted">{{ event.delivery_error }}</small>
+                </div>
+                {% else %}
+                <div class="text-center py-3">
+                    <i class="bi bi-clock-fill text-warning fs-1"></i>
+                    <p class="mt-2 mb-0 text-warning">Ожидает доставки</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Related Info -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Информация</h5>
+            </div>
+            <div class="card-body">
+                <dl class="mb-0">
+                    <dt>Правило</dt>
+                    <dd>
+                        <a href="{% url 'alerts:rule_detail' pk=event.alert_rule.pk %}">
+                            {{ event.alert_rule.name }}
+                        </a>
+                    </dd>
+
+                    <dt>Товар</dt>
+                    <dd>
+                        <a href="{% url 'products:detail' pk=event.listing.product.pk %}">
+                            {{ event.listing.product.name }}
+                        </a>
+                    </dd>
+
+                    <dt>Ретейлер</dt>
+                    <dd>{{ event.listing.retailer.name }}</dd>
+
+                    {% if event.snapshot %}
+                    <dt>Снимок цены</dt>
+                    <dd>
+                        {{ event.snapshot.scraped_at|date:"d.m.Y H:i" }}
+                        {% if event.snapshot.price_final %}
+                        — {{ event.snapshot.price_final }} ₽
+                        {% endif %}
+                    </dd>
+                    {% endif %}
+
+                    <dt>ID события</dt>
+                    <dd><code class="small">{{ event.pk }}</code></dd>
+                </dl>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,116 @@
+{% extends 'base.html' %}
+
+{% block title %}История сборов — Retail Monitor{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h3 mb-0">История сборов данных</h1>
+    <form method="post" action="{% url 'scraping:run' %}">
+        {% csrf_token %}
+        <button type="submit" class="btn btn-primary">
+            <i class="bi bi-play-fill me-1"></i> Запустить сбор
+        </button>
+    </form>
+</div>
+
+<div class="card">
+    <div class="table-responsive">
+        <table class="table table-hover mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>Дата</th>
+                    <th>Тип</th>
+                    <th>Ретейлер</th>
+                    <th>Статус</th>
+                    <th class="text-center">Успешно</th>
+                    <th class="text-center">Ошибок</th>
+                    <th>Длительность</th>
+                    <th>Действия</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for session in sessions %}
+                <tr>
+                    <td>{{ session.created_at|date:"d.m.Y H:i" }}</td>
+                    <td>
+                        {% if session.trigger_type == 'manual' %}
+                        <span class="badge bg-info">Вручную</span>
+                        {% else %}
+                        <span class="badge bg-primary">По расписанию</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ session.retailer.name|default:"Все" }}</td>
+                    <td>
+                        {% if session.status == 'completed' %}
+                        <span class="badge bg-success">Завершено</span>
+                        {% elif session.status == 'running' %}
+                        <span class="badge bg-warning">Выполняется</span>
+                        {% elif session.status == 'failed' %}
+                        <span class="badge bg-danger">Ошибка</span>
+                        {% elif session.status == 'pending' %}
+                        <span class="badge bg-secondary">Ожидает</span>
+                        {% else %}
+                        <span class="badge bg-dark">{{ session.status }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-center">
+                        <span class="text-success">{{ session.listings_success }}</span>
+                    </td>
+                    <td class="text-center">
+                        {% if session.listings_failed > 0 %}
+                        <span class="text-danger">{{ session.listings_failed }}</span>
+                        {% else %}
+                        <span class="text-muted">0</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if session.duration %}
+                        {{ session.duration }}
+                        {% else %}
+                        —
+                        {% endif %}
+                    </td>
+                    <td>
+                        <a href="{% url 'scraping:session_detail' pk=session.pk %}" class="btn btn-sm btn-outline-primary">
+                            <i class="bi bi-eye"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="8" class="text-center py-4 text-muted">
+                        <i class="bi bi-inbox fs-1 d-block mb-2"></i>
+                        Сборов данных ещё не было
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Pagination -->
+{% if page_obj.has_other_pages %}
+<nav class="mt-4">
+    <ul class="pagination justify-content-center">
+        {% if page_obj.has_previous %}
+        <li class="page-item">
+            <a class="page-link" href="?page={{ page_obj.previous_page_number }}">&laquo;</a>
+        </li>
+        {% endif %}
+        {% for num in page_obj.paginator.page_range %}
+            {% if page_obj.number == num %}
+            <li class="page-item active"><span class="page-link">{{ num }}</span></li>
+            {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+            <li class="page-item"><a class="page-link" href="?page={{ num }}">{{ num }}</a></li>
+            {% endif %}
+        {% endfor %}
+        {% if page_obj.has_next %}
+        <li class="page-item">
+            <a class="page-link" href="?page={{ page_obj.next_page_number }}">&raquo;</a>
+        </li>
+        {% endif %}
+    </ul>
+</nav>
+{% endif %}
+{% endblock %}

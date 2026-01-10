@@ -1,0 +1,158 @@
+{% extends 'base.html' %}
+
+{% block title %}Анализ {{ analysis.listing.product.name }} — Retail Monitor{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{% url 'analytics:analysis_list' %}">AI Анализ</a></li>
+        <li class="breadcrumb-item active">{{ analysis.listing.product.name }}</li>
+    </ol>
+</nav>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h3 mb-0">
+        <i class="bi bi-robot me-2"></i>{{ analysis.listing.product.name }}
+    </h1>
+    <span class="badge bg-secondary fs-6">{{ analysis.period_month|date:"F Y" }}</span>
+</div>
+
+<div class="row g-4">
+    <div class="col-md-8">
+        <!-- Suggestions for Own Products -->
+        {% if analysis.remove_suggestions or analysis.add_packaging_suggestions or analysis.add_taste_suggestions %}
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-transparent border-0">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-lightbulb me-2 text-warning"></i>Рекомендации по улучшению
+                </h5>
+            </div>
+            <div class="card-body">
+                {% if analysis.remove_suggestions %}
+                <div class="mb-3">
+                    <h6 class="text-danger"><i class="bi bi-dash-circle me-1"></i>Что убрать</h6>
+                    <p class="mb-0">{{ analysis.remove_suggestions }}</p>
+                </div>
+                {% endif %}
+
+                {% if analysis.add_packaging_suggestions %}
+                <div class="mb-3">
+                    <h6 class="text-primary"><i class="bi bi-box me-1"></i>Добавить в упаковку</h6>
+                    <p class="mb-0">{{ analysis.add_packaging_suggestions }}</p>
+                </div>
+                {% endif %}
+
+                {% if analysis.add_taste_suggestions %}
+                <div class="mb-0">
+                    <h6 class="text-success"><i class="bi bi-cup-hot me-1"></i>Изменить во вкусе</h6>
+                    <p class="mb-0">{{ analysis.add_taste_suggestions }}</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- Key Themes -->
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-transparent border-0">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-tags me-2"></i>Ключевые темы
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6 mb-3 mb-md-0">
+                        <h6 class="text-success mb-2"><i class="bi bi-hand-thumbs-up me-1"></i>Позитивные</h6>
+                        {% if analysis.key_positive_themes %}
+                        <ul class="list-unstyled mb-0">
+                            {% for theme in analysis.key_positive_themes %}
+                            <li class="mb-1">
+                                <span class="badge bg-success-subtle text-success">{{ theme }}</span>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                        {% else %}
+                        <p class="text-muted mb-0">Нет данных</p>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-6">
+                        <h6 class="text-danger mb-2"><i class="bi bi-hand-thumbs-down me-1"></i>Негативные</h6>
+                        {% if analysis.key_negative_themes %}
+                        <ul class="list-unstyled mb-0">
+                            {% for theme in analysis.key_negative_themes %}
+                            <li class="mb-1">
+                                <span class="badge bg-danger-subtle text-danger">{{ theme }}</span>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                        {% else %}
+                        <p class="text-muted mb-0">Нет данных</p>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Competitor Insights -->
+        {% if analysis.competitor_insights %}
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-transparent border-0">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-graph-up me-2 text-info"></i>Инсайты о конкурентах
+                </h5>
+            </div>
+            <div class="card-body">
+                <p class="mb-0">{{ analysis.competitor_insights }}</p>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="col-md-4">
+        <!-- Metadata -->
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-transparent border-0">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-info-circle me-2"></i>Информация
+                </h5>
+            </div>
+            <div class="card-body">
+                <table class="table table-sm table-borderless mb-0">
+                    <tr>
+                        <td class="text-muted">Товар</td>
+                        <td>
+                            <a href="{% url 'products:detail' analysis.listing.product.pk %}">
+                                {{ analysis.listing.product.name }}
+                            </a>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Ретейлер</td>
+                        <td>{{ analysis.listing.retailer.name }}</td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Период</td>
+                        <td>{{ analysis.period_month|date:"F Y" }}</td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Тип анализа</td>
+                        <td>{{ analysis.get_analysis_type_display }}</td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Модель</td>
+                        <td>{{ analysis.model_used|default:"-" }}</td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Токенов</td>
+                        <td>{{ analysis.tokens_used }}</td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Создано</td>
+                        <td>{{ analysis.generated_at|date:"d.m.Y H:i" }}</td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

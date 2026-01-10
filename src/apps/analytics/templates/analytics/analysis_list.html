@@ -1,0 +1,87 @@
+{% extends 'base.html' %}
+
+{% block title %}AI Анализ — Retail Monitor{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h3 mb-0">
+        <i class="bi bi-robot me-2"></i>AI Анализ отзывов
+    </h1>
+    <a href="{% url 'analytics:generate' %}" class="btn btn-primary">
+        <i class="bi bi-play-fill me-1"></i> Запустить анализ
+    </a>
+</div>
+
+{% if analyses %}
+<div class="card border-0 shadow-sm">
+    <div class="table-responsive">
+        <table class="table table-hover mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>Товар</th>
+                    <th>Ретейлер</th>
+                    <th>Период</th>
+                    <th>Тип</th>
+                    <th>Создано</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for analysis in analyses %}
+                <tr>
+                    <td>
+                        <a href="{% url 'products:detail' analysis.listing.product.pk %}" class="text-decoration-none">
+                            {{ analysis.listing.product.name }}
+                        </a>
+                    </td>
+                    <td>{{ analysis.listing.retailer.name }}</td>
+                    <td>{{ analysis.period_month|date:"F Y" }}</td>
+                    <td>
+                        <span class="badge bg-secondary">{{ analysis.get_analysis_type_display }}</span>
+                    </td>
+                    <td>{{ analysis.generated_at|date:"d.m.Y H:i" }}</td>
+                    <td>
+                        <a href="{% url 'analytics:analysis_detail' analysis.pk %}" class="btn btn-sm btn-outline-primary">
+                            <i class="bi bi-eye"></i>
+                        </a>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% if page_obj.has_other_pages %}
+<nav class="mt-4">
+    <ul class="pagination justify-content-center">
+        {% if page_obj.has_previous %}
+        <li class="page-item">
+            <a class="page-link" href="?page={{ page_obj.previous_page_number }}">Назад</a>
+        </li>
+        {% endif %}
+        <li class="page-item disabled">
+            <span class="page-link">{{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
+        </li>
+        {% if page_obj.has_next %}
+        <li class="page-item">
+            <a class="page-link" href="?page={{ page_obj.next_page_number }}">Вперёд</a>
+        </li>
+        {% endif %}
+    </ul>
+</nav>
+{% endif %}
+
+{% else %}
+<div class="card border-0 shadow-sm">
+    <div class="card-body text-center py-5">
+        <i class="bi bi-robot fs-1 text-muted mb-3"></i>
+        <h4 class="text-muted">Нет анализов</h4>
+        <p class="text-muted mb-4">Запустите AI-анализ для генерации инсайтов по отзывам</p>
+        <a href="{% url 'analytics:generate' %}" class="btn btn-primary">
+            <i class="bi bi-play-fill me-1"></i> Запустить анализ
+        </a>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

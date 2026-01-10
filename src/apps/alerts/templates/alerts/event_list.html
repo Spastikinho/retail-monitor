@@ -1,0 +1,161 @@
+{% extends 'base.html' %}
+
+{% block title %}События оповещений — Retail Monitor{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h3 mb-0">События оповещений</h1>
+    <a href="{% url 'alerts:rule_list' %}" class="btn btn-outline-secondary">
+        <i class="bi bi-gear me-1"></i> Правила
+    </a>
+</div>
+
+<!-- Filters -->
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-3">
+            <div class="col-md-4">
+                <label class="form-label small">Правило</label>
+                <select name="rule" class="form-select form-select-sm">
+                    <option value="">Все правила</option>
+                    {% for rule in rules %}
+                    <option value="{{ rule.pk }}" {% if current_rule == rule.pk|stringformat:"s" %}selected{% endif %}>
+                        {{ rule.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label small">Статус доставки</label>
+                <select name="delivered" class="form-select form-select-sm">
+                    <option value="">Все</option>
+                    <option value="1" {% if current_delivered == '1' %}selected{% endif %}>Доставлено</option>
+                    <option value="0" {% if current_delivered == '0' %}selected{% endif %}>Ожидает</option>
+                </select>
+            </div>
+            <div class="col-md-4 d-flex align-items-end">
+                <button type="submit" class="btn btn-primary btn-sm">
+                    <i class="bi bi-search me-1"></i> Фильтр
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Events List -->
+<div class="card">
+    <ul class="list-group list-group-flush">
+        {% for event in events %}
+        <li class="list-group-item">
+            <div class="d-flex justify-content-between align-items-start">
+                <div class="flex-grow-1">
+                    <div class="d-flex align-items-center mb-1">
+                        {% if event.alert_rule.alert_type == 'price_increase' %}
+                        <span class="badge bg-danger me-2">📈 {{ event.alert_rule.get_alert_type_display }}</span>
+                        {% elif event.alert_rule.alert_type == 'price_decrease' %}
+                        <span class="badge bg-success me-2">📉 {{ event.alert_rule.get_alert_type_display }}</span>
+                        {% elif event.alert_rule.alert_type == 'new_negative_review' %}
+                        <span class="badge bg-warning text-dark me-2">😡 {{ event.alert_rule.get_alert_type_display }}</span>
+                        {% elif event.alert_rule.alert_type == 'out_of_stock' %}
+                        <span class="badge bg-secondary me-2">❌ {{ event.alert_rule.get_alert_type_display }}</span>
+                        {% else %}
+                        <span class="badge bg-info me-2">{{ event.alert_rule.get_alert_type_display }}</span>
+                        {% endif %}
+
+                        <a href="{% url 'alerts:rule_detail' pk=event.alert_rule.pk %}" class="text-decoration-none small">
+                            {{ event.alert_rule.name }}
+                        </a>
+                    </div>
+
+                    <div class="fw-medium">
+                        <a href="{% url 'products:detail' pk=event.listing.product.pk %}" class="text-decoration-none">
+                            {{ event.listing.product.name|truncatewords:5 }}
+                        </a>
+                        <span class="text-muted">/ {{ event.listing.retailer.name }}</span>
+                    </div>
+
+                    <p class="mb-1 small text-muted">{{ event.message }}</p>
+
+                    {% if event.details.old_price and event.details.new_price %}
+                    <span class="badge bg-light text-dark">
+                        {{ event.details.old_price }} ₽ → {{ event.details.new_price }} ₽
+                        {% if event.details.pct_change %}
+                        ({% if event.details.pct_change > 0 %}+{% endif %}{{ event.details.pct_change|floatformat:1 }}%)
+                        {% endif %}
+                    </span>
+                    {% endif %}
+
+                    {% if event.details.rating %}
+                    <span class="badge bg-warning-subtle text-warning">
+                        {% for i in "12345" %}
+                            {% if forloop.counter <= event.details.rating %}
+                            <i class="bi bi-star-fill"></i>
+                            {% else %}
+                            <i class="bi bi-star"></i>
+                            {% endif %}
+                        {% endfor %}
+                    </span>
+                    {% endif %}
+
+                    {% if event.details.review_text %}
+                    <p class="small text-muted mt-1 mb-0 fst-italic">
+                        "{{ event.details.review_text|truncatewords:20 }}"
+                    </p>
+                    {% endif %}
+                </div>
+
+                <div class="text-end ms-3" style="min-width: 120px;">
+                    <div class="text-muted small">{{ event.triggered_at|date:"d.m.Y H:i" }}</div>
+                    {% if event.is_delivered %}
+                    <span class="badge bg-success-subtle text-success">
+                        <i class="bi bi-check-circle me-1"></i>Доставлено
+                    </span>
+                    {% if event.delivered_at %}
+                    <div class="text-muted small">{{ event.delivered_at|date:"H:i" }}</div>
+                    {% endif %}
+                    {% elif event.delivery_error %}
+                    <span class="badge bg-danger-subtle text-danger">
+                        <i class="bi bi-x-circle me-1"></i>Ошибка
+                    </span>
+                    {% else %}
+                    <span class="badge bg-warning-subtle text-warning">
+                        <i class="bi bi-clock me-1"></i>Ожидает
+                    </span>
+                    {% endif %}
+                </div>
+            </div>
+        </li>
+        {% empty %}
+        <li class="list-group-item text-center py-5 text-muted">
+            <i class="bi bi-bell-slash fs-1 d-block mb-3"></i>
+            Событий оповещений нет
+        </li>
+        {% endfor %}
+    </ul>
+</div>
+
+<!-- Pagination -->
+{% if page_obj.has_other_pages %}
+<nav class="mt-4">
+    <ul class="pagination justify-content-center">
+        {% if page_obj.has_previous %}
+        <li class="page-item">
+            <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if current_rule %}&rule={{ current_rule }}{% endif %}{% if current_delivered %}&delivered={{ current_delivered }}{% endif %}">
+                <i class="bi bi-chevron-left"></i>
+            </a>
+        </li>
+        {% endif %}
+        <li class="page-item disabled">
+            <span class="page-link">{{ page_obj.number }} из {{ page_obj.paginator.num_pages }}</span>
+        </li>
+        {% if page_obj.has_next %}
+        <li class="page-item">
+            <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if current_rule %}&rule={{ current_rule }}{% endif %}{% if current_delivered %}&delivered={{ current_delivered }}{% endif %}">
+                <i class="bi bi-chevron-right"></i>
+            </a>
+        </li>
+        {% endif %}
+    </ul>
+</nav>
+{% endif %}
+{% endblock %}

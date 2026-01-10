@@ -1,0 +1,46 @@
+{% extends 'base.html' %}
+
+{% block title %}Удалить правило — Retail Monitor{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{% url 'alerts:rule_list' %}">Оповещения</a></li>
+        <li class="breadcrumb-item"><a href="{% url 'alerts:rule_detail' pk=object.pk %}">{{ object.name }}</a></li>
+        <li class="breadcrumb-item active">Удалить</li>
+    </ol>
+</nav>
+
+<div class="row justify-content-center">
+    <div class="col-md-6">
+        <div class="card border-danger">
+            <div class="card-header bg-danger text-white">
+                <h5 class="card-title mb-0"><i class="bi bi-exclamation-triangle me-2"></i>Удаление правила</h5>
+            </div>
+            <div class="card-body">
+                <p>Вы уверены, что хотите удалить правило оповещения?</p>
+
+                <div class="alert alert-secondary">
+                    <strong>{{ object.name }}</strong>
+                    <br>
+                    <small class="text-muted">{{ object.get_alert_type_display }}</small>
+                </div>
+
+                <p class="text-danger mb-0">
+                    <i class="bi bi-exclamation-circle me-1"></i>
+                    Все связанные события оповещений также будут удалены.
+                </p>
+            </div>
+            <div class="card-footer d-flex justify-content-between">
+                <a href="{% url 'alerts:rule_detail' pk=object.pk %}" class="btn btn-outline-secondary">Отмена</a>
+                <form method="post">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-danger">
+                        <i class="bi bi-trash me-1"></i> Удалить
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

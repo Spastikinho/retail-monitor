@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Retail Monitor{% endblock %}</title>
+
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css" rel="stylesheet">
+    <!-- Inter Font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --sidebar-width: 260px;
+            /* Warm, sophisticated palette */
+            --color-bg: #faf9f7;
+            --color-surface: #ffffff;
+            --color-sidebar: #1a1a1a;
+            --color-sidebar-hover: #2a2a2a;
+            --color-text: #1a1a1a;
+            --color-text-muted: #6b6b6b;
+            --color-text-light: #999999;
+            --color-border: #e8e6e3;
+            --color-accent: #2d5a4a;
+            --color-accent-light: #3d7a64;
+            --color-accent-bg: #f0f5f3;
+            --color-success: #2d6a4f;
+            --color-warning: #b45309;
+            --color-danger: #991b1b;
+            --color-info: #1e40af;
+            --shadow-sm: 0 1px 2px rgba(0,0,0,0.04);
+            --shadow-md: 0 4px 12px rgba(0,0,0,0.06);
+            --shadow-lg: 0 8px 24px rgba(0,0,0,0.08);
+            --radius-sm: 6px;
+            --radius-md: 10px;
+            --radius-lg: 14px;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--color-bg);
+            color: var(--color-text);
+            min-height: 100vh;
+            font-size: 14px;
+            line-height: 1.6;
+            -webkit-font-smoothing: antialiased;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: var(--sidebar-width);
+            min-height: 100vh;
+            background: var(--color-sidebar);
+            position: fixed;
+            left: 0;
+            top: 0;
+            z-index: 1000;
+        }
+
+        .sidebar-inner {
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            color: #fff;
+            text-decoration: none;
+            padding: 0.5rem 0;
+            margin-bottom: 0.5rem;
+        }
+
+        .brand-icon {
+            width: 36px;
+            height: 36px;
+            background: var(--color-accent);
+            border-radius: var(--radius-sm);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.1rem;
+        }
+
+        .brand-text {
+            font-weight: 600;
+            font-size: 1rem;
+            letter-spacing: -0.02em;
+        }
+
+        .sidebar-divider {
+            height: 1px;
+            background: rgba(255,255,255,0.08);
+            margin: 1rem 0;
+        }
+
+        .nav-section {
+            flex: 1;
+        }
+
+        .nav-pills {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .sidebar .nav-link {
+            color: rgba(255,255,255,0.65);
+            padding: 0.65rem 0.85rem;
+            border-radius: var(--radius-sm);
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+            transition: all 0.15s ease;
+        }
+
+        .sidebar .nav-link:hover {
+            color: #fff;
+            background: var(--color-sidebar-hover);
+        }
+
+        .sidebar .nav-link.active {
+            color: #fff;
+            background: var(--color-accent);
+        }
+
+        .sidebar .nav-link i {
+            font-size: 1.1rem;
+            opacity: 0.85;
+        }
+
+        /* User dropdown */
+        .user-section {
+            margin-top: auto;
+        }
+
+        .user-dropdown-toggle {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.75rem;
+            border-radius: var(--radius-sm);
+            color: rgba(255,255,255,0.8);
+            text-decoration: none;
+            transition: background 0.15s ease;
+        }
+
+        .user-dropdown-toggle:hover {
+            background: var(--color-sidebar-hover);
+            color: #fff;
+        }
+
+        .user-avatar {
+            width: 32px;
+            height: 32px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.9rem;
+        }
+
+        .user-name {
+            font-weight: 500;
+            font-size: 0.875rem;
+        }
+
+        /* Main content */
+        .main-content {
+            margin-left: var(--sidebar-width);
+            min-height: 100vh;
+            background: var(--color-bg);
+        }
+
+        .content-wrapper {
+            padding: 2rem 2.5rem;
+            max-width: 1400px;
+        }
+
+        /* Cards */
+        .card {
+            background: var(--color-surface);
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-md);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .card-header {
+            background: transparent;
+            border-bottom: 1px solid var(--color-border);
+            padding: 1rem 1.25rem;
+            font-weight: 600;
+            font-size: 0.875rem;
+        }
+
+        .card-body {
+            padding: 1.25rem;
+        }
+
+        .card-footer {
+            background: transparent;
+            border-top: 1px solid var(--color-border);
+            padding: 0.875rem 1.25rem;
+        }
+
+        /* Buttons */
+        .btn {
+            font-weight: 500;
+            font-size: 0.875rem;
+            padding: 0.5rem 1rem;
+            border-radius: var(--radius-sm);
+            transition: all 0.15s ease;
+        }
+
+        .btn-primary {
+            background: var(--color-accent);
+            border-color: var(--color-accent);
+        }
+
+        .btn-primary:hover {
+            background: var(--color-accent-light);
+            border-color: var(--color-accent-light);
+        }
+
+        .btn-outline-primary {
+            color: var(--color-accent);
+            border-color: var(--color-accent);
+        }
+
+        .btn-outline-primary:hover {
+            background: var(--color-accent);
+            border-color: var(--color-accent);
+        }
+
+        .btn-outline-secondary {
+            color: var(--color-text-muted);
+            border-color: var(--color-border);
+        }
+
+        .btn-outline-secondary:hover {
+            background: var(--color-bg);
+            border-color: var(--color-border);
+            color: var(--color-text);
+        }
+
+        .btn-outline-danger {
+            color: var(--color-danger);
+            border-color: var(--color-danger);
+        }
+
+        .btn-outline-danger:hover {
+            background: var(--color-danger);
+            border-color: var(--color-danger);
+            color: #fff;
+        }
+
+        /* Tables */
+        .table {
+            font-size: 0.875rem;
+        }
+
+        .table > thead {
+            background: var(--color-bg);
+        }
+
+        .table > thead th {
+            font-weight: 600;
+            color: var(--color-text-muted);
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            letter-spacing: 0.03em;
+            padding: 0.875rem 1rem;
+            border-bottom: 1px solid var(--color-border);
+        }
+
+        .table > tbody td {
+            padding: 0.875rem 1rem;
+            vertical-align: middle;
+            border-bottom: 1px solid var(--color-border);
+        }
+
+        .table-hover > tbody > tr:hover {
+            background: var(--color-bg);
+        }
+
+        /* Badges */
+        .badge {
+            font-weight: 500;
+            font-size: 0.75rem;
+            padding: 0.35em 0.65em;
+            border-radius: 4px;
+        }
+
+        .bg-primary {
+            background: var(--color-accent) !important;
+        }
+
+        .bg-success {
+            background: var(--color-success) !important;
+        }
+
+        .bg-danger {
+            background: var(--color-danger) !important;
+        }
+
+        .bg-warning {
+            background: var(--color-warning) !important;
+            color: #fff !important;
+        }
+
+        .bg-info {
+            background: var(--color-info) !important;
+        }
+
+        .bg-secondary {
+            background: #6b6b6b !important;
+        }
+
+        /* Forms */
+        .form-control, .form-select {
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-sm);
+            padding: 0.6rem 0.875rem;
+            font-size: 0.875rem;
+            transition: border-color 0.15s ease, box-shadow 0.15s ease;
+        }
+
+        .form-control:focus, .form-select:focus {
+            border-color: var(--color-accent);
+            box-shadow: 0 0 0 3px var(--color-accent-bg);
+        }
+
+        .form-label {
+            font-weight: 500;
+            font-size: 0.875rem;
+            margin-bottom: 0.5rem;
+            color: var(--color-text);
+        }
+
+        .form-text {
+            color: var(--color-text-muted);
+            font-size: 0.8rem;
+        }
+
+        .form-check-input:checked {
+            background-color: var(--color-accent);
+            border-color: var(--color-accent);
+        }
+
+        /* Alerts */
+        .alert {
+            border-radius: var(--radius-sm);
+            border: none;
+            font-size: 0.875rem;
+            padding: 0.875rem 1rem;
+        }
+
+        .alert-success {
+            background: #ecfdf5;
+            color: var(--color-success);
+        }
+
+        .alert-danger {
+            background: #fef2f2;
+            color: var(--color-danger);
+        }
+
+        .alert-warning {
+            background: #fffbeb;
+            color: var(--color-warning);
+        }
+
+        .alert-info {
+            background: #eff6ff;
+            color: var(--color-info);
+        }
+
+        /* Breadcrumb */
+        .breadcrumb {
+            font-size: 0.875rem;
+            margin-bottom: 0;
+        }
+
+        .breadcrumb-item a {
+            color: var(--color-text-muted);
+            text-decoration: none;
+        }
+
+        .breadcrumb-item a:hover {
+            color: var(--color-accent);
+        }
+
+        .breadcrumb-item.active {
+            color: var(--color-text);
+        }
+
+        /* Links */
+        a {
+            color: var(--color-accent);
+            text-decoration: none;
+        }
+
+        a:hover {
+            color: var(--color-accent-light);
+        }
+
+        /* List group */
+        .list-group-item {
+            border-color: var(--color-border);
+            padding: 1rem 1.25rem;
+        }
+
+        .list-group-item-action:hover {
+            background: var(--color-bg);
+        }
+
+        /* Dropdown */
+        .dropdown-menu {
+            border: 1px solid var(--color-border);
+            border-radius: var(--radius-sm);
+            box-shadow: var(--shadow-md);
+            padding: 0.5rem;
+        }
+
+        .dropdown-menu-dark {
+            background: var(--color-sidebar);
+            border-color: rgba(255,255,255,0.1);
+        }
+
+        .dropdown-item {
+            font-size: 0.875rem;
+            padding: 0.5rem 0.75rem;
+            border-radius: 4px;
+        }
+
+        .dropdown-item:hover {
+            background: var(--color-sidebar-hover);
+        }
+
+        /* Pagination */
+        .pagination {
+            gap: 4px;
+        }
+
+        .page-link {
+            border-radius: var(--radius-sm);
+            border: 1px solid var(--color-border);
+            color: var(--color-text);
+            font-size: 0.875rem;
+            padding: 0.5rem 0.875rem;
+        }
+
+        .page-link:hover {
+            background: var(--color-bg);
+            border-color: var(--color-border);
+            color: var(--color-text);
+        }
+
+        .page-item.active .page-link {
+            background: var(--color-accent);
+            border-color: var(--color-accent);
+        }
+
+        .page-item.disabled .page-link {
+            background: transparent;
+            color: var(--color-text-light);
+        }
+
+        /* Spinner */
+        .spinner-border-sm {
+            width: 0.875rem;
+            height: 0.875rem;
+            border-width: 2px;
+        }
+
+        /* Typography */
+        h1, h2, h3, h4, h5, h6 {
+            font-weight: 600;
+            letter-spacing: -0.02em;
+            color: var(--color-text);
+        }
+
+        .text-muted {
+            color: var(--color-text-muted) !important;
+        }
+
+        .text-success {
+            color: var(--color-success) !important;
+        }
+
+        .text-danger {
+            color: var(--color-danger) !important;
+        }
+
+        .text-warning {
+            color: var(--color-warning) !important;
+        }
+
+        .text-info {
+            color: var(--color-info) !important;
+        }
+
+        /* Stats cards */
+        .stat-card {
+            text-align: center;
+            padding: 1.25rem;
+        }
+
+        .stat-value {
+            font-size: 1.75rem;
+            font-weight: 700;
+            line-height: 1.2;
+            letter-spacing: -0.03em;
+        }
+
+        .stat-label {
+            font-size: 0.8rem;
+            color: var(--color-text-muted);
+            margin-top: 0.25rem;
+        }
+
+        /* Responsive */
+        @media (max-width: 991px) {
+            .sidebar {
+                transform: translateX(-100%);
+                transition: transform 0.2s ease;
+            }
+
+            .sidebar.show {
+                transform: translateX(0);
+            }
+
+            .main-content {
+                margin-left: 0;
+            }
+
+            .content-wrapper {
+                padding: 1.5rem;
+            }
+        }
+    </style>
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    {% if user.is_authenticated %}
+    <!-- Sidebar -->
+    <nav class="sidebar">
+        <div class="sidebar-inner">
+            <a href="{% url 'core:dashboard' %}" class="brand">
+                <div class="brand-icon">
+                    <i class="bi bi-bar-chart-line"></i>
+                </div>
+                <span class="brand-text">Retail Monitor</span>
+            </a>
+
+            <div class="sidebar-divider"></div>
+
+            <div class="nav-section">
+                <ul class="nav nav-pills">
+                    <li class="nav-item">
+                        <a href="{% url 'core:dashboard' %}" class="nav-link {% if request.resolver_match.url_name == 'dashboard' %}active{% endif %}">
+                            <i class="bi bi-grid-1x2"></i>
+                            <span>Обзор</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="{% url 'products:list' %}" class="nav-link {% if 'products' in request.resolver_match.app_name %}active{% endif %}">
+                            <i class="bi bi-box-seam"></i>
+                            <span>Товары</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="{% url 'retailers:list' %}" class="nav-link {% if 'retailers' in request.resolver_match.app_name %}active{% endif %}">
+                            <i class="bi bi-shop"></i>
+                            <span>Ретейлеры</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="{% url 'scraping:session_list' %}" class="nav-link {% if 'scraping' in request.resolver_match.app_name and 'import' not in request.resolver_match.url_name %}active{% endif %}">
+                            <i class="bi bi-cloud-download"></i>
+                            <span>Сбор данных</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="{% url 'scraping:import_create' %}" class="nav-link {% if 'import' in request.resolver_match.url_name %}active{% endif %}">
+                            <i class="bi bi-link-45deg"></i>
+                            <span>Импорт ссылок</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="{% url 'reports:index' %}" class="nav-link {% if 'reports' in request.resolver_match.app_name %}active{% endif %}">
+                            <i class="bi bi-file-earmark-text"></i>
+                            <span>Отчёты</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a href="{% url 'alerts:rule_list' %}" class="nav-link {% if 'alerts' in request.resolver_match.app_name %}active{% endif %}">
+                            <i class="bi bi-bell"></i>
+                            <span>Оповещения</span>
+                        </a>
+                    </li>
+                </ul>
+            </div>
+
+            <div class="sidebar-divider"></div>
+
+            <div class="user-section">
+                <div class="dropdown">
+                    <a href="#" class="user-dropdown-toggle dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
+                        <div class="user-avatar">
+                            <i class="bi bi-person"></i>
+                        </div>
+                        <span class="user-name">{{ user.username }}</span>
+                    </a>
+                    <ul class="dropdown-menu dropdown-menu-dark">
+                        <li><a class="dropdown-item" href="{% url 'admin:index' %}"><i class="bi bi-gear me-2"></i>Админка</a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                            <form method="post" action="{% url 'logout' %}">
+                                {% csrf_token %}
+                                <button type="submit" class="dropdown-item"><i class="bi bi-box-arrow-right me-2"></i>Выйти</button>
+                            </form>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main content -->
+    <main class="main-content">
+        <div class="content-wrapper">
+            <!-- Messages -->
+            {% if messages %}
+                {% for message in messages %}
+                <div class="alert alert-{{ message.tags }} alert-dismissible fade show" role="alert">
+                    {{ message }}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+                {% endfor %}
+            {% endif %}
+
+            {% block content %}{% endblock %}
+        </div>
+    </main>
+    {% else %}
+    <div class="container py-5">
+        {% block content_anonymous %}{% endblock %}
+    </div>
+    {% endif %}
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

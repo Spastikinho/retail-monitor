@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+{% load crispy_forms_tags %}
+
+{% block title %}{% if object %}Редактировать{% else %}Создать{% endif %} группу - Retail Monitor{% endblock %}
+
+{% block extra_css %}
+<style>
+    .page-header {
+        margin-bottom: 2rem;
+    }
+
+    .page-title {
+        font-size: 1.5rem;
+        font-weight: 600;
+        margin: 0;
+    }
+
+    .form-card {
+        max-width: 500px;
+        border: none;
+        box-shadow: var(--shadow-md);
+    }
+
+    .form-card .card-body {
+        padding: 1.75rem;
+    }
+
+    .type-selector {
+        display: flex;
+        gap: 1rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .type-option {
+        flex: 1;
+        border: 2px solid var(--color-border);
+        border-radius: var(--radius-md);
+        padding: 1rem;
+        cursor: pointer;
+        transition: all 0.15s ease;
+        text-align: center;
+    }
+
+    .type-option:hover {
+        border-color: var(--color-accent);
+    }
+
+    .type-option.selected {
+        border-color: var(--color-accent);
+        background: rgba(37, 99, 235, 0.05);
+    }
+
+    .type-option input {
+        display: none;
+    }
+
+    .type-option-title {
+        font-weight: 600;
+    }
+
+    .type-own { border-top: 3px solid var(--color-success); }
+    .type-competitor { border-top: 3px solid var(--color-warning); }
+
+    .color-preview {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .color-swatch {
+        width: 40px;
+        height: 40px;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--color-border);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">{% if object %}Редактировать{% else %}Создать{% endif %} группу</h1>
+</div>
+
+<div class="card form-card">
+    <div class="card-body">
+        <form method="post">
+            {% csrf_token %}
+
+            <div class="mb-4">
+                <label for="id_name" class="form-label">Название группы</label>
+                {{ form.name }}
+                {% if form.name.errors %}
+                <div class="invalid-feedback d-block">{{ form.name.errors.0 }}</div>
+                {% endif %}
+            </div>
+
+            <div class="mb-4">
+                <label class="form-label">Тип группы</label>
+                <div class="type-selector">
+                    <label class="type-option type-own {% if form.group_type.value == 'own' %}selected{% endif %}">
+                        <input type="radio" name="group_type" value="own" {% if form.group_type.value == 'own' %}checked{% endif %}>
+                        <div class="type-option-title">Наши товары</div>
+                    </label>
+                    <label class="type-option type-competitor {% if form.group_type.value != 'own' %}selected{% endif %}">
+                        <input type="radio" name="group_type" value="competitor" {% if form.group_type.value != 'own' %}checked{% endif %}>
+                        <div class="type-option-title">Конкуренты</div>
+                    </label>
+                </div>
+            </div>
+
+            <div class="mb-4">
+                <label for="id_description" class="form-label">Описание (опционально)</label>
+                {{ form.description }}
+            </div>
+
+            <div class="mb-4">
+                <label for="id_color" class="form-label">Цвет</label>
+                <div class="color-preview">
+                    {{ form.color }}
+                    <div class="color-swatch" id="colorPreview" style="background-color: {{ form.color.value|default:'#6b7280' }};"></div>
+                </div>
+            </div>
+
+            <div class="d-flex gap-2">
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-check me-1"></i>
+                    {% if object %}Сохранить{% else %}Создать{% endif %}
+                </button>
+                <a href="{% url 'scraping:group_list' %}" class="btn btn-outline-secondary">
+                    Отмена
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Type selector
+    const options = document.querySelectorAll('.type-option');
+    options.forEach(option => {
+        const input = option.querySelector('input');
+        if (input.checked) option.classList.add('selected');
+
+        option.addEventListener('click', function() {
+            options.forEach(o => o.classList.remove('selected'));
+            this.classList.add('selected');
+            this.querySelector('input').checked = true;
+        });
+    });
+
+    // Color preview
+    const colorInput = document.getElementById('id_color');
+    const colorPreview = document.getElementById('colorPreview');
+
+    if (colorInput && colorPreview) {
+        colorInput.addEventListener('input', function() {
+            colorPreview.style.backgroundColor = this.value;
+        });
+    }
+});
+</script>
+{% endblock %}

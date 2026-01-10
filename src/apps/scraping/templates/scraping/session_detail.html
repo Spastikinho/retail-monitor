@@ -1,0 +1,160 @@
+{% extends 'base.html' %}
+
+{% block title %}Сессия сбора — Retail Monitor{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{% url 'scraping:session_list' %}">История сборов</a></li>
+        <li class="breadcrumb-item active">{{ session.created_at|date:"d.m.Y H:i" }}</li>
+    </ol>
+</nav>
+
+<div class="d-flex justify-content-between align-items-start mb-4">
+    <div>
+        <h1 class="h3 mb-1">Сессия сбора данных</h1>
+        <p class="text-muted mb-0">{{ session.created_at|date:"d.m.Y H:i:s" }}</p>
+    </div>
+    <div>
+        {% if session.status == 'completed' %}
+        <span class="badge bg-success fs-6">Завершено</span>
+        {% elif session.status == 'running' %}
+        <span class="badge bg-warning fs-6">Выполняется</span>
+        {% elif session.status == 'failed' %}
+        <span class="badge bg-danger fs-6">Ошибка</span>
+        {% else %}
+        <span class="badge bg-secondary fs-6">{{ session.get_status_display }}</span>
+        {% endif %}
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Session Info -->
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Информация</h5>
+            </div>
+            <div class="card-body">
+                <dl class="row mb-0">
+                    <dt class="col-sm-5">Тип запуска</dt>
+                    <dd class="col-sm-7">{{ session.get_trigger_type_display }}</dd>
+
+                    <dt class="col-sm-5">Ретейлер</dt>
+                    <dd class="col-sm-7">{{ session.retailer.name|default:"Все" }}</dd>
+
+                    <dt class="col-sm-5">Запустил</dt>
+                    <dd class="col-sm-7">{{ session.triggered_by.username|default:"Система" }}</dd>
+
+                    <dt class="col-sm-5">Начало</dt>
+                    <dd class="col-sm-7">{{ session.started_at|date:"H:i:s"|default:"—" }}</dd>
+
+                    <dt class="col-sm-5">Окончание</dt>
+                    <dd class="col-sm-7">{{ session.finished_at|date:"H:i:s"|default:"—" }}</dd>
+
+                    <dt class="col-sm-5">Длительность</dt>
+                    <dd class="col-sm-7">{{ session.duration|default:"—" }}</dd>
+                </dl>
+            </div>
+        </div>
+
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Статистика</h5>
+            </div>
+            <div class="card-body">
+                <div class="row text-center">
+                    <div class="col-4">
+                        <h3 class="mb-0">{{ session.listings_total }}</h3>
+                        <small class="text-muted">Всего</small>
+                    </div>
+                    <div class="col-4">
+                        <h3 class="mb-0 text-success">{{ session.listings_success }}</h3>
+                        <small class="text-muted">Успешно</small>
+                    </div>
+                    <div class="col-4">
+                        <h3 class="mb-0 text-danger">{{ session.listings_failed }}</h3>
+                        <small class="text-muted">Ошибок</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {% if session.error_log %}
+        <div class="card mt-4">
+            <div class="card-header bg-danger text-white">
+                <h5 class="card-title mb-0">Ошибки</h5>
+            </div>
+            <div class="card-body">
+                <pre class="mb-0 small">{{ session.error_log }}</pre>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Snapshots -->
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Собранные данные</h5>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Товар</th>
+                            <th>Ретейлер</th>
+                            <th>Цена</th>
+                            <th>Рейтинг</th>
+                            <th>В наличии</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for snapshot in price_snapshots %}
+                        <tr>
+                            <td>
+                                <a href="{% url 'products:detail' pk=snapshot.listing.product.pk %}">
+                                    {{ snapshot.listing.product.name }}
+                                </a>
+                            </td>
+                            <td>{{ snapshot.listing.retailer.name }}</td>
+                            <td>
+                                {% if snapshot.price_final %}
+                                {{ snapshot.price_final }} ₽
+                                {% if snapshot.price_promo %}
+                                <span class="badge bg-danger">акция</span>
+                                {% endif %}
+                                {% else %}
+                                <span class="text-muted">—</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if snapshot.rating_avg %}
+                                <span class="text-warning"><i class="bi bi-star-fill"></i></span>
+                                {{ snapshot.rating_avg }}
+                                {% else %}
+                                —
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if snapshot.in_stock %}
+                                <span class="badge bg-success">Да</span>
+                                {% else %}
+                                <span class="badge bg-danger">Нет</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="5" class="text-center py-4 text-muted">
+                                Данных пока нет
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

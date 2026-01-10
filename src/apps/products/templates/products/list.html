@@ -1,0 +1,232 @@
+{% extends 'base.html' %}
+
+{% block title %}Товары — Retail Monitor{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h3 mb-0">Товары</h1>
+    <div class="btn-group">
+        <a href="{% url 'products:import' %}" class="btn btn-outline-primary">
+            <i class="bi bi-upload me-1"></i> Импорт
+        </a>
+        <a href="{% url 'products:export' %}?{{ request.GET.urlencode }}" class="btn btn-outline-secondary">
+            <i class="bi bi-download me-1"></i> Экспорт
+        </a>
+        <a href="{% url 'products:create' %}" class="btn btn-primary">
+            <i class="bi bi-plus-lg me-1"></i> Добавить
+        </a>
+    </div>
+</div>
+
+<!-- Filters -->
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-3 align-items-end">
+            <div class="col-md-3">
+                <label class="form-label">Поиск</label>
+                <input type="text" name="q" class="form-control" placeholder="Название товара..." value="{{ request.GET.q }}">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Тип</label>
+                <select name="is_own" class="form-select">
+                    <option value="">Все</option>
+                    <option value="1" {% if request.GET.is_own == '1' %}selected{% endif %}>Наши</option>
+                    <option value="0" {% if request.GET.is_own == '0' %}selected{% endif %}>Конкуренты</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label">Бренд</label>
+                <input type="text" name="brand" class="form-control" placeholder="Бренд..." value="{{ request.GET.brand }}">
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-outline-primary w-100">
+                    <i class="bi bi-search me-1"></i> Найти
+                </button>
+            </div>
+            <div class="col-md-2">
+                <a href="{% url 'products:list' %}" class="btn btn-outline-secondary w-100">Сбросить</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Batch Actions Form -->
+<form id="batchForm" method="post" action="{% url 'products:batch_action' %}">
+    {% csrf_token %}
+
+    <!-- Batch Actions Bar -->
+    <div id="batchActionsBar" class="card mb-3 d-none">
+        <div class="card-body py-2 d-flex align-items-center justify-content-between">
+            <div>
+                <span class="text-muted me-2">Выбрано:</span>
+                <span id="selectedCount" class="badge bg-primary">0</span>
+            </div>
+            <div class="btn-group">
+                <button type="submit" name="action" value="scrape" class="btn btn-sm btn-outline-primary">
+                    <i class="bi bi-arrow-repeat me-1"></i> Собрать данные
+                </button>
+                <button type="submit" name="action" value="mark_own" class="btn btn-sm btn-outline-success">
+                    <i class="bi bi-check-circle me-1"></i> Отметить как свои
+                </button>
+                <button type="submit" name="action" value="mark_competitor" class="btn btn-sm btn-outline-secondary">
+                    <i class="bi bi-people me-1"></i> Отметить как конкуренты
+                </button>
+                <button type="submit" name="action" value="activate" class="btn btn-sm btn-outline-info">
+                    <i class="bi bi-eye me-1"></i> Активировать
+                </button>
+                <button type="submit" name="action" value="deactivate" class="btn btn-sm btn-outline-warning">
+                    <i class="bi bi-eye-slash me-1"></i> Деактивировать
+                </button>
+                <button type="submit" name="action" value="delete" class="btn btn-sm btn-outline-danger"
+                        onclick="return confirm('Вы уверены, что хотите удалить выбранные товары?')">
+                    <i class="bi bi-trash me-1"></i> Удалить
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Products Table -->
+    <div class="card">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width: 40px;">
+                            <input type="checkbox" id="selectAll" class="form-check-input">
+                        </th>
+                        <th>Название</th>
+                        <th>Бренд</th>
+                        <th>Тип</th>
+                        <th class="text-center">Наш/Конкурент</th>
+                        <th class="text-center">Листингов</th>
+                        <th>Действия</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for product in products %}
+                    <tr>
+                        <td>
+                            <input type="checkbox" name="product_ids" value="{{ product.pk }}" class="form-check-input product-checkbox">
+                        </td>
+                        <td>
+                            <a href="{% url 'products:detail' pk=product.pk %}" class="text-decoration-none">
+                                {{ product.name }}
+                            </a>
+                            {% if product.weight_grams %}
+                            <small class="text-muted">{{ product.weight_grams }}г</small>
+                            {% endif %}
+                            {% if not product.is_active %}
+                            <span class="badge bg-warning text-dark ms-1">Неактивен</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ product.brand }}</td>
+                        <td>{{ product.product_type|default:"—" }}</td>
+                        <td class="text-center">
+                            {% if product.is_own %}
+                            <span class="badge bg-success">Наш</span>
+                            {% else %}
+                            <span class="badge bg-secondary">Конкурент</span>
+                            {% endif %}
+                        </td>
+                        <td class="text-center">
+                            <span class="badge bg-info">{{ product.listings.count }}</span>
+                        </td>
+                        <td>
+                            <a href="{% url 'products:detail' pk=product.pk %}" class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-eye"></i>
+                            </a>
+                            <a href="{% url 'products:edit' pk=product.pk %}" class="btn btn-sm btn-outline-secondary">
+                                <i class="bi bi-pencil"></i>
+                            </a>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="7" class="text-center py-4 text-muted">
+                            <i class="bi bi-inbox fs-1 d-block mb-2"></i>
+                            Товаров пока нет. <a href="{% url 'products:create' %}">Добавить первый товар</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</form>
+
+<!-- Pagination -->
+{% if page_obj.has_other_pages %}
+<nav class="mt-4">
+    <ul class="pagination justify-content-center">
+        {% if page_obj.has_previous %}
+        <li class="page-item">
+            <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% for k, v in request.GET.items %}{% if k != 'page' %}&{{ k }}={{ v }}{% endif %}{% endfor %}">&laquo;</a>
+        </li>
+        {% endif %}
+
+        {% for num in page_obj.paginator.page_range %}
+            {% if page_obj.number == num %}
+            <li class="page-item active"><span class="page-link">{{ num }}</span></li>
+            {% elif num > page_obj.number|add:'-3' and num < page_obj.number|add:'3' %}
+            <li class="page-item">
+                <a class="page-link" href="?page={{ num }}{% for k, v in request.GET.items %}{% if k != 'page' %}&{{ k }}={{ v }}{% endif %}{% endfor %}">{{ num }}</a>
+            </li>
+            {% endif %}
+        {% endfor %}
+
+        {% if page_obj.has_next %}
+        <li class="page-item">
+            <a class="page-link" href="?page={{ page_obj.next_page_number }}{% for k, v in request.GET.items %}{% if k != 'page' %}&{{ k }}={{ v }}{% endif %}{% endfor %}">&raquo;</a>
+        </li>
+        {% endif %}
+    </ul>
+</nav>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const selectAllCheckbox = document.getElementById('selectAll');
+    const productCheckboxes = document.querySelectorAll('.product-checkbox');
+    const batchActionsBar = document.getElementById('batchActionsBar');
+    const selectedCountBadge = document.getElementById('selectedCount');
+
+    function updateBatchBar() {
+        const checkedCount = document.querySelectorAll('.product-checkbox:checked').length;
+        selectedCountBadge.textContent = checkedCount;
+
+        if (checkedCount > 0) {
+            batchActionsBar.classList.remove('d-none');
+        } else {
+            batchActionsBar.classList.add('d-none');
+        }
+
+        // Update select all checkbox state
+        if (checkedCount === 0) {
+            selectAllCheckbox.checked = false;
+            selectAllCheckbox.indeterminate = false;
+        } else if (checkedCount === productCheckboxes.length) {
+            selectAllCheckbox.checked = true;
+            selectAllCheckbox.indeterminate = false;
+        } else {
+            selectAllCheckbox.checked = false;
+            selectAllCheckbox.indeterminate = true;
+        }
+    }
+
+    // Select all checkbox
+    selectAllCheckbox.addEventListener('change', function() {
+        productCheckboxes.forEach(cb => {
+            cb.checked = this.checked;
+        });
+        updateBatchBar();
+    });
+
+    // Individual checkboxes
+    productCheckboxes.forEach(cb => {
+        cb.addEventListener('change', updateBatchBar);
+    });
+});
+</script>
+{% endblock %}

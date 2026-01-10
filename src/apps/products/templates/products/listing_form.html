@@ -1,0 +1,59 @@
+{% extends 'base.html' %}
+{% load crispy_forms_tags %}
+
+{% block title %}Добавить листинг — Retail Monitor{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{% url 'products:list' %}">Товары</a></li>
+        <li class="breadcrumb-item"><a href="{% url 'products:detail' pk=product.pk %}">{{ product.name }}</a></li>
+        <li class="breadcrumb-item active">Добавить листинг</li>
+    </ol>
+</nav>
+
+<div class="row">
+    <div class="col-md-8 col-lg-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">{{ page_title }}</h5>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle me-2"></i>
+                    Добавление листинга для товара <strong>{{ product.name }}</strong>
+                </div>
+
+                <form method="post">
+                    {% csrf_token %}
+                    {{ form|crispy }}
+
+                    <div class="d-flex gap-2 mt-4">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-check-lg me-1"></i> Добавить
+                        </button>
+                        <a href="{% url 'products:detail' pk=product.pk %}" class="btn btn-outline-secondary">Отмена</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <h6 class="card-title mb-0">Подсказка</h6>
+            </div>
+            <div class="card-body">
+                <p class="small text-muted">Скопируйте URL страницы товара с сайта ретейлера.</p>
+                <p class="small text-muted mb-0">Примеры:</p>
+                <ul class="small text-muted mb-0">
+                    <li>Ozon: <code>https://ozon.ru/product/...</code></li>
+                    <li>ВкусВилл: <code>https://vkusvill.ru/goods/...</code></li>
+                    <li>Перекрёсток: <code>https://perekrestok.ru/cat/.../p/...</code></li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

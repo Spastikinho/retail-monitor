@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ alert_type_display }}</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            margin: 0;
+            padding: 0;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 600px;
+            margin: 20px auto;
+            background: #fff;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .header {
+            padding: 20px 30px;
+            color: #fff;
+        }
+        .header.price_increase { background: #dc3545; }
+        .header.price_decrease { background: #28a745; }
+        .header.new_negative_review { background: #fd7e14; }
+        .header.new_positive_competitor { background: #17a2b8; }
+        .header.out_of_stock { background: #6c757d; }
+        .header h1 {
+            margin: 0;
+            font-size: 20px;
+            font-weight: 600;
+        }
+        .content {
+            padding: 30px;
+        }
+        .product-info {
+            background: #f8f9fa;
+            border-radius: 6px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .product-name {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+        .retailer-name {
+            color: #6c757d;
+            font-size: 14px;
+        }
+        .message {
+            font-size: 16px;
+            padding: 15px;
+            background: #e9ecef;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+        .details {
+            border-top: 1px solid #dee2e6;
+            padding-top: 20px;
+        }
+        .details h3 {
+            margin: 0 0 15px 0;
+            font-size: 14px;
+            color: #6c757d;
+            text-transform: uppercase;
+        }
+        .details-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .details-table td {
+            padding: 8px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+        .details-table td:first-child {
+            color: #6c757d;
+            width: 40%;
+        }
+        .footer {
+            background: #f8f9fa;
+            padding: 15px 30px;
+            text-align: center;
+            font-size: 12px;
+            color: #6c757d;
+        }
+        .footer a {
+            color: #0d6efd;
+            text-decoration: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header {{ alert_type }}">
+            <h1>{{ alert_type_display }}</h1>
+        </div>
+
+        <div class="content">
+            <div class="product-info">
+                <div class="product-name">{{ product_name }}</div>
+                <div class="retailer-name">{{ retailer_name }}</div>
+            </div>
+
+            <div class="message">
+                {{ message }}
+            </div>
+
+            {% if details %}
+            <div class="details">
+                <h3>Подробности</h3>
+                <table class="details-table">
+                    {% if details.old_price %}
+                    <tr>
+                        <td>Старая цена</td>
+                        <td>{{ details.old_price }} руб.</td>
+                    </tr>
+                    {% endif %}
+                    {% if details.new_price %}
+                    <tr>
+                        <td>Новая цена</td>
+                        <td>{{ details.new_price }} руб.</td>
+                    </tr>
+                    {% endif %}
+                    {% if details.pct_change %}
+                    <tr>
+                        <td>Изменение</td>
+                        <td>{{ details.pct_change }}%</td>
+                    </tr>
+                    {% endif %}
+                    {% if details.rating %}
+                    <tr>
+                        <td>Рейтинг</td>
+                        <td>{{ details.rating }} / 5</td>
+                    </tr>
+                    {% endif %}
+                    {% if details.author %}
+                    <tr>
+                        <td>Автор</td>
+                        <td>{{ details.author }}</td>
+                    </tr>
+                    {% endif %}
+                    {% if details.review_text %}
+                    <tr>
+                        <td colspan="2" style="padding-top: 15px;">
+                            <em>"{{ details.review_text }}"</em>
+                        </td>
+                    </tr>
+                    {% endif %}
+                </table>
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="footer">
+            <p>Это автоматическое уведомление от Retail Monitor.</p>
+            <p><a href="#">Управление оповещениями</a></p>
+        </div>
+    </div>
+</body>
+</html>

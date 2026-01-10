@@ -1,0 +1,119 @@
+{% extends 'base.html' %}
+{% load crispy_forms_tags %}
+
+{% block title %}{{ page_title }} — Оповещения — Retail Monitor{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{% url 'alerts:rule_list' %}">Оповещения</a></li>
+        <li class="breadcrumb-item active">{{ page_title }}</li>
+    </ol>
+</nav>
+
+<div class="row justify-content-center">
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">{{ page_title }}</h5>
+            </div>
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+
+                    <div class="row">
+                        <div class="col-md-8 mb-3">
+                            <label class="form-label">Название</label>
+                            {{ form.name }}
+                            {% if form.name.errors %}
+                            <div class="invalid-feedback d-block">{{ form.name.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">Статус</label>
+                            <div class="form-check form-switch mt-2">
+                                {{ form.is_active }}
+                                <label class="form-check-label" for="{{ form.is_active.id_for_label }}">Активно</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Тип оповещения</label>
+                        {{ form.alert_type }}
+                        {% if form.alert_type.errors %}
+                        <div class="invalid-feedback d-block">{{ form.alert_type.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+
+                    <hr class="my-4">
+                    <h6 class="text-muted mb-3">Область действия</h6>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Товар</label>
+                            {{ form.product }}
+                            <div class="form-text">Оставьте пустым для всех товаров</div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Ретейлер</label>
+                            {{ form.retailer }}
+                            <div class="form-text">Оставьте пустым для всех ретейлеров</div>
+                        </div>
+                    </div>
+
+                    <hr class="my-4">
+                    <h6 class="text-muted mb-3">Условия срабатывания</h6>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Порог изменения цены (%)</label>
+                            {{ form.threshold_pct }}
+                            <div class="form-text">{{ form.threshold_pct.help_text }}</div>
+                            {% if form.threshold_pct.errors %}
+                            <div class="invalid-feedback d-block">{{ form.threshold_pct.errors.0 }}</div>
+                            {% endif %}
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Порог рейтинга отзыва</label>
+                            {{ form.threshold_rating }}
+                            <div class="form-text">{{ form.threshold_rating.help_text }}</div>
+                        </div>
+                    </div>
+
+                    <hr class="my-4">
+                    <h6 class="text-muted mb-3">Доставка уведомлений</h6>
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Канал</label>
+                            {{ form.channel }}
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">Пауза между уведомлениями (часы)</label>
+                            {{ form.cooldown_hours }}
+                            <div class="form-text">{{ form.cooldown_hours.help_text }}</div>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Получатели</label>
+                        {{ form.recipients }}
+                        <div class="form-text">{{ form.recipients.help_text }}</div>
+                        {% if form.recipients.errors %}
+                        <div class="invalid-feedback d-block">{{ form.recipients.errors.0 }}</div>
+                        {% endif %}
+                    </div>
+
+                    <hr class="my-4">
+
+                    <div class="d-flex justify-content-between">
+                        <a href="{% url 'alerts:rule_list' %}" class="btn btn-outline-secondary">Отмена</a>
+                        <button type="submit" class="btn btn-primary">{{ submit_text }}</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

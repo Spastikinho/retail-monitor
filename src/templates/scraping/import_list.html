@@ -1,0 +1,397 @@
+{% extends "base.html" %}
+
+{% block title %}История импортов - Retail Monitor{% endblock %}
+
+{% block extra_css %}
+<style>
+    .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 2rem;
+    }
+
+    .page-title {
+        font-size: 1.5rem;
+        font-weight: 600;
+        margin: 0;
+    }
+
+    /* Stats */
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+    }
+
+    @media (max-width: 768px) {
+        .stats-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+
+    .stat-card {
+        background: var(--color-surface);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-md);
+        padding: 1.25rem;
+        text-align: center;
+    }
+
+    .stat-value {
+        font-size: 1.75rem;
+        font-weight: 700;
+        line-height: 1.2;
+        letter-spacing: -0.03em;
+    }
+
+    .stat-value.processing { color: var(--color-info); }
+    .stat-value.completed { color: var(--color-success); }
+    .stat-value.failed { color: var(--color-danger); }
+
+    .stat-label {
+        font-size: 0.8rem;
+        color: var(--color-text-muted);
+        margin-top: 0.25rem;
+    }
+
+    /* Table */
+    .imports-table {
+        background: var(--color-surface);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-md);
+        overflow: hidden;
+    }
+
+    .imports-table .table {
+        margin: 0;
+    }
+
+    .imports-table .table th {
+        background: var(--color-bg);
+        border-top: none;
+    }
+
+    .product-cell {
+        max-width: 280px;
+    }
+
+    .product-link {
+        font-weight: 500;
+        color: var(--color-text);
+        display: block;
+    }
+
+    .product-link:hover {
+        color: var(--color-accent);
+    }
+
+    .product-url {
+        color: var(--color-text-muted);
+        font-size: 0.8rem;
+    }
+
+    .price-value {
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .rating-cell {
+        display: flex;
+        align-items: center;
+        gap: 0.35rem;
+    }
+
+    .rating-star {
+        color: #f59e0b;
+    }
+
+    .rating-count {
+        color: var(--color-text-light);
+        font-size: 0.8rem;
+    }
+
+    .status-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        padding: 0.35rem 0.65rem;
+        border-radius: 100px;
+        font-size: 0.75rem;
+        font-weight: 500;
+    }
+
+    .status-badge.pending {
+        background: #f3f4f6;
+        color: #6b7280;
+    }
+
+    .status-badge.processing {
+        background: #eff6ff;
+        color: var(--color-info);
+    }
+
+    .status-badge.completed {
+        background: #ecfdf5;
+        color: var(--color-success);
+    }
+
+    .status-badge.failed {
+        background: #fef2f2;
+        color: var(--color-danger);
+    }
+
+    .date-cell {
+        font-size: 0.8rem;
+        color: var(--color-text-muted);
+        white-space: nowrap;
+    }
+
+    .action-btn {
+        width: 32px;
+        height: 32px;
+        padding: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: var(--radius-sm);
+        border: 1px solid var(--color-border);
+        background: transparent;
+        color: var(--color-text-muted);
+        transition: all 0.15s ease;
+    }
+
+    .action-btn:hover {
+        background: var(--color-bg);
+        color: var(--color-text);
+        border-color: var(--color-border);
+    }
+
+    .action-btn.delete:hover {
+        background: #fef2f2;
+        color: var(--color-danger);
+        border-color: #fecaca;
+    }
+
+    /* Empty state */
+    .empty-state {
+        padding: 4rem 2rem;
+        text-align: center;
+    }
+
+    .empty-icon {
+        font-size: 3rem;
+        color: var(--color-border);
+        margin-bottom: 1rem;
+    }
+
+    .empty-title {
+        font-size: 1rem;
+        font-weight: 500;
+        margin-bottom: 0.5rem;
+    }
+
+    .empty-text {
+        color: var(--color-text-muted);
+        font-size: 0.875rem;
+    }
+
+    /* Retailer badge */
+    .retailer-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        padding: 0.25rem 0.5rem;
+        background: var(--color-bg);
+        border-radius: 4px;
+        font-size: 0.75rem;
+        font-weight: 500;
+        color: var(--color-text-muted);
+    }
+
+    .retailer-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: var(--color-accent);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">История импортов</h1>
+    <a href="{% url 'scraping:import_create' %}" class="btn btn-primary">
+        <i class="bi bi-plus me-1"></i>
+        Новый импорт
+    </a>
+</div>
+
+<!-- Stats -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-value">{{ total_count }}</div>
+        <div class="stat-label">Всего</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value processing">{{ pending_count|add:processing_count }}</div>
+        <div class="stat-label">В обработке</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value completed">{{ completed_count }}</div>
+        <div class="stat-label">Успешно</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value failed">{{ failed_count }}</div>
+        <div class="stat-label">С ошибками</div>
+    </div>
+</div>
+
+<!-- Imports table -->
+<div class="imports-table">
+    {% if imports %}
+    <div class="table-responsive">
+        <table class="table table-hover">
+            <thead>
+                <tr>
+                    <th>Товар</th>
+                    <th>Магазин</th>
+                    <th>Цена</th>
+                    <th>Рейтинг</th>
+                    <th>Статус</th>
+                    <th>Дата</th>
+                    <th style="width: 80px;"></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for imp in imports %}
+                <tr>
+                    <td class="product-cell">
+                        <a href="{% url 'scraping:import_detail' pk=imp.pk %}" class="product-link text-truncate">
+                            {% if imp.product_title %}
+                                {{ imp.product_title|truncatechars:50 }}
+                            {% else %}
+                                <span class="product-url">{{ imp.url|truncatechars:50 }}</span>
+                            {% endif %}
+                        </a>
+                    </td>
+                    <td>
+                        {% if imp.retailer %}
+                        <span class="retailer-badge">
+                            <span class="retailer-dot"></span>
+                            {{ imp.retailer.name }}
+                        </span>
+                        {% else %}
+                        <span class="text-muted">-</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if imp.price_final %}
+                        <span class="price-value">{{ imp.price_final }}</span>
+                        <span class="text-muted">₽</span>
+                        {% else %}
+                        <span class="text-muted">-</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if imp.rating %}
+                        <div class="rating-cell">
+                            <i class="bi bi-star-fill rating-star"></i>
+                            <span>{{ imp.rating }}</span>
+                            {% if imp.reviews_count %}
+                            <span class="rating-count">({{ imp.reviews_count }})</span>
+                            {% endif %}
+                        </div>
+                        {% else %}
+                        <span class="text-muted">-</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="status-badge {{ imp.status }}">
+                            {% if imp.status == 'pending' %}
+                                Ожидает
+                            {% elif imp.status == 'processing' %}
+                                <span class="spinner-border spinner-border-sm"></span>
+                                Обработка
+                            {% elif imp.status == 'completed' %}
+                                Готово
+                            {% else %}
+                                Ошибка
+                            {% endif %}
+                        </span>
+                    </td>
+                    <td class="date-cell">
+                        {{ imp.created_at|date:"d.m.Y H:i" }}
+                    </td>
+                    <td>
+                        <div class="d-flex gap-1">
+                            <a href="{% url 'scraping:import_detail' pk=imp.pk %}" class="action-btn" title="Подробнее">
+                                <i class="bi bi-eye"></i>
+                            </a>
+                            <form method="post" action="{% url 'scraping:import_delete' pk=imp.pk %}" class="d-inline" onsubmit="return confirm('Удалить эту запись?');">
+                                {% csrf_token %}
+                                <button type="submit" class="action-btn delete" title="Удалить">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if is_paginated %}
+    <div class="card-footer d-flex justify-content-center">
+        <nav>
+            <ul class="pagination mb-0">
+                {% if page_obj.has_previous %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ page_obj.previous_page_number }}">
+                        <i class="bi bi-chevron-left"></i>
+                    </a>
+                </li>
+                {% endif %}
+
+                <li class="page-item disabled">
+                    <span class="page-link">{{ page_obj.number }} / {{ page_obj.paginator.num_pages }}</span>
+                </li>
+
+                {% if page_obj.has_next %}
+                <li class="page-item">
+                    <a class="page-link" href="?page={{ page_obj.next_page_number }}">
+                        <i class="bi bi-chevron-right"></i>
+                    </a>
+                </li>
+                {% endif %}
+            </ul>
+        </nav>
+    </div>
+    {% endif %}
+
+    {% else %}
+    <div class="empty-state">
+        <i class="bi bi-inbox empty-icon d-block"></i>
+        <div class="empty-title">Нет импортов</div>
+        <p class="empty-text mb-3">Добавьте ссылки на товары, чтобы начать сбор данных</p>
+        <a href="{% url 'scraping:import_create' %}" class="btn btn-primary">
+            <i class="bi bi-plus me-1"></i>
+            Новый импорт
+        </a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Auto-refresh page if there are pending imports
+{% if pending_count or processing_count %}
+setTimeout(function() {
+    location.reload();
+}, 10000);
+{% endif %}
+</script>
+{% endblock %}

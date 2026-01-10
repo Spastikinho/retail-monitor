@@ -1,0 +1,403 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ product.name }} — Retail Monitor{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{% url 'products:list' %}">Товары</a></li>
+        <li class="breadcrumb-item active">{{ product.name }}</li>
+    </ol>
+</nav>
+
+<div class="d-flex justify-content-between align-items-start mb-4">
+    <div>
+        <h1 class="h3 mb-1">{{ product.name }}</h1>
+        <p class="text-muted mb-0">
+            {{ product.brand }}
+            {% if product.is_own %}
+            <span class="badge bg-success ms-2">Наш товар</span>
+            {% else %}
+            <span class="badge bg-secondary ms-2">Конкурент</span>
+            {% endif %}
+        </p>
+    </div>
+    <div>
+        <a href="{% url 'products:edit' pk=product.pk %}" class="btn btn-outline-secondary">
+            <i class="bi bi-pencil me-1"></i> Редактировать
+        </a>
+        <a href="{% url 'products:delete' pk=product.pk %}" class="btn btn-outline-danger">
+            <i class="bi bi-trash me-1"></i> Удалить
+        </a>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Product Info -->
+    <div class="col-md-4">
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Характеристики</h5>
+            </div>
+            <div class="card-body">
+                <dl class="row mb-0">
+                    {% if product.product_type %}
+                    <dt class="col-sm-5">Тип</dt>
+                    <dd class="col-sm-7">{{ product.product_type }}</dd>
+                    {% endif %}
+
+                    {% if product.weight_grams %}
+                    <dt class="col-sm-5">Вес</dt>
+                    <dd class="col-sm-7">{{ product.weight_grams }} г</dd>
+                    {% endif %}
+
+                    {% if product.packaging_type %}
+                    <dt class="col-sm-5">Упаковка</dt>
+                    <dd class="col-sm-7">{{ product.get_packaging_type_display }}</dd>
+                    {% endif %}
+
+                    {% if product.caliber %}
+                    <dt class="col-sm-5">Калибр</dt>
+                    <dd class="col-sm-7">{{ product.caliber }}</dd>
+                    {% endif %}
+
+                    {% if product.has_pit is not None %}
+                    <dt class="col-sm-5">Косточка</dt>
+                    <dd class="col-sm-7">{% if product.has_pit %}Да{% else %}Нет{% endif %}</dd>
+                    {% endif %}
+
+                    {% if product.variety %}
+                    <dt class="col-sm-5">Сорт</dt>
+                    <dd class="col-sm-7">{{ product.variety }}</dd>
+                    {% endif %}
+                </dl>
+
+                {% if product.notes %}
+                <hr>
+                <p class="text-muted small mb-0">{{ product.notes }}</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Listings -->
+    <div class="col-md-8">
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">Листинги на площадках</h5>
+                <a href="{% url 'products:listing_add' product_pk=product.pk %}" class="btn btn-sm btn-primary">
+                    <i class="bi bi-plus-lg me-1"></i> Добавить
+                </a>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-hover mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Ретейлер</th>
+                            <th>Последний сбор</th>
+                            <th>Цена</th>
+                            <th>Рейтинг</th>
+                            <th>Действия</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for listing in listings %}
+                        <tr>
+                            <td>
+                                <i class="bi bi-shop me-1"></i>
+                                {{ listing.retailer.name }}
+                                {% if not listing.is_active %}
+                                <span class="badge bg-secondary">неактивен</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if listing.last_scraped_at %}
+                                {{ listing.last_scraped_at|date:"d.m.Y H:i" }}
+                                {% else %}
+                                <span class="text-muted">—</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% with snapshot=listing.last_price_snapshot %}
+                                {% if snapshot and snapshot.price_final %}
+                                {{ snapshot.price_final }} ₽
+                                {% if snapshot.price_promo %}
+                                <span class="badge bg-danger">акция</span>
+                                {% endif %}
+                                {% else %}
+                                <span class="text-muted">—</span>
+                                {% endif %}
+                                {% endwith %}
+                            </td>
+                            <td>
+                                {% with snapshot=listing.last_price_snapshot %}
+                                {% if snapshot and snapshot.rating_avg %}
+                                <span class="text-warning"><i class="bi bi-star-fill"></i></span>
+                                {{ snapshot.rating_avg }}
+                                <small class="text-muted">({{ snapshot.reviews_count }})</small>
+                                {% else %}
+                                <span class="text-muted">—</span>
+                                {% endif %}
+                                {% endwith %}
+                            </td>
+                            <td>
+                                <div class="btn-group btn-group-sm">
+                                    <a href="{{ listing.external_url }}" target="_blank" class="btn btn-outline-primary" title="Открыть на сайте">
+                                        <i class="bi bi-box-arrow-up-right"></i>
+                                    </a>
+                                    <form method="post" action="{% url 'scraping:run_listing' listing_pk=listing.pk %}" class="d-inline">
+                                        {% csrf_token %}
+                                        <button type="submit" class="btn btn-outline-success" title="Собрать данные">
+                                            <i class="bi bi-cloud-download"></i>
+                                        </button>
+                                    </form>
+                                    <a href="{% url 'products:listing_delete' pk=listing.pk %}" class="btn btn-outline-danger" title="Удалить">
+                                        <i class="bi bi-trash"></i>
+                                    </a>
+                                </div>
+                            </td>
+                        </tr>
+                        {% empty %}
+                        <tr>
+                            <td colspan="5" class="text-center py-4 text-muted">
+                                Листингов нет. <a href="{% url 'products:listing_add' product_pk=product.pk %}">Добавить первый</a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Price History -->
+        {% if price_history %}
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="card-title mb-0">История цен</h5>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-sm mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Дата</th>
+                            <th>Ретейлер</th>
+                            <th>Обычная</th>
+                            <th>Промо</th>
+                            <th>По карте</th>
+                            <th>Итого</th>
+                            <th>Рейтинг</th>
+                            <th>Наличие</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for snapshot in price_history %}
+                        <tr>
+                            <td>{{ snapshot.scraped_at|date:"d.m.Y H:i" }}</td>
+                            <td>{{ snapshot.listing.retailer.name }}</td>
+                            <td>{% if snapshot.price_regular %}{{ snapshot.price_regular }} ₽{% else %}—{% endif %}</td>
+                            <td>
+                                {% if snapshot.price_promo %}
+                                <span class="text-danger">{{ snapshot.price_promo }} ₽</span>
+                                {% else %}—{% endif %}
+                            </td>
+                            <td>
+                                {% if snapshot.price_card %}
+                                <span class="text-primary">{{ snapshot.price_card }} ₽</span>
+                                {% else %}—{% endif %}
+                            </td>
+                            <td><strong>{% if snapshot.price_final %}{{ snapshot.price_final }} ₽{% else %}—{% endif %}</strong></td>
+                            <td>
+                                {% if snapshot.rating_avg %}
+                                <span class="text-warning"><i class="bi bi-star-fill"></i></span>
+                                {{ snapshot.rating_avg }}
+                                {% else %}—{% endif %}
+                            </td>
+                            <td>
+                                {% if snapshot.in_stock %}
+                                <span class="badge bg-success">Да</span>
+                                {% else %}
+                                <span class="badge bg-danger">Нет</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% if price_history.count >= 20 %}
+            <div class="card-footer text-muted small">
+                Показаны последние 20 записей
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <!-- Reviews -->
+        {% if reviews %}
+        <div class="card mb-4">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">
+                    Последние отзывы
+                    {% if reviews_stats %}
+                    <span class="badge bg-secondary ms-2">{{ reviews_stats.total }}</span>
+                    {% endif %}
+                </h5>
+                <a href="{% url 'scraping:reviews_list' %}?product={{ product.pk }}" class="btn btn-sm btn-outline-primary">
+                    Все отзывы
+                </a>
+            </div>
+
+            {% if reviews_stats %}
+            <div class="card-body border-bottom">
+                <div class="row text-center">
+                    <div class="col">
+                        <div class="h4 mb-0 text-danger">{{ reviews_stats.negative }}</div>
+                        <small class="text-muted">Негативных (1-3)</small>
+                    </div>
+                    <div class="col">
+                        <div class="h4 mb-0 text-warning">{{ reviews_stats.neutral }}</div>
+                        <small class="text-muted">Нейтральных (4)</small>
+                    </div>
+                    <div class="col">
+                        <div class="h4 mb-0 text-success">{{ reviews_stats.positive }}</div>
+                        <small class="text-muted">Позитивных (5)</small>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
+
+            <ul class="list-group list-group-flush">
+                {% for review in reviews %}
+                <li class="list-group-item">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div class="me-3 flex-grow-1">
+                            <div class="d-flex align-items-center mb-1">
+                                {% for i in "12345" %}
+                                    {% if forloop.counter <= review.rating %}
+                                    <i class="bi bi-star-fill text-warning"></i>
+                                    {% else %}
+                                    <i class="bi bi-star text-muted"></i>
+                                    {% endif %}
+                                {% endfor %}
+                                <span class="ms-2 text-muted small">
+                                    {{ review.listing.retailer.name }}
+                                </span>
+                                {% if review.sentiment == 'negative' %}
+                                <span class="badge bg-danger ms-2">Негативный</span>
+                                {% elif review.sentiment == 'neutral' %}
+                                <span class="badge bg-warning text-dark ms-2">Нейтральный</span>
+                                {% endif %}
+                            </div>
+                            <p class="mb-1">{{ review.text|truncatewords:50 }}</p>
+                            {% if review.pros %}
+                            <p class="mb-1 small text-success"><strong>+</strong> {{ review.pros|truncatewords:20 }}</p>
+                            {% endif %}
+                            {% if review.cons %}
+                            <p class="mb-0 small text-danger"><strong>-</strong> {{ review.cons|truncatewords:20 }}</p>
+                            {% endif %}
+                        </div>
+                        <div class="text-end text-muted small" style="min-width: 100px;">
+                            {% if review.author_name %}
+                            <div>{{ review.author_name }}</div>
+                            {% endif %}
+                            {% if review.published_at %}
+                            <div>{{ review.published_at|date:"d.m.Y" }}</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </li>
+                {% endfor %}
+            </ul>
+
+            {% if reviews.count >= 10 %}
+            <div class="card-footer text-center">
+                <a href="{% url 'scraping:reviews_list' %}?product={{ product.pk }}" class="text-decoration-none">
+                    Показать все отзывы
+                </a>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <!-- AI Insights -->
+        {% if analyses %}
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-lightbulb me-2 text-warning"></i>AI-выводы по отзывам
+                </h5>
+            </div>
+            <div class="card-body">
+                {% for analysis in analyses %}
+                <div class="{% if not forloop.last %}border-bottom pb-3 mb-3{% endif %}">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <span class="badge bg-primary">{{ analysis.listing.retailer.name }}</span>
+                        <small class="text-muted">{{ analysis.period_month|date:"F Y" }}</small>
+                    </div>
+
+                    {% if product.is_own %}
+                    <!-- Insights for own products -->
+                    {% if analysis.remove_suggestions %}
+                    <div class="mb-2">
+                        <strong class="text-danger"><i class="bi bi-x-circle me-1"></i>Что убрать:</strong>
+                        <p class="mb-0 small">{{ analysis.remove_suggestions }}</p>
+                    </div>
+                    {% endif %}
+
+                    {% if analysis.add_packaging_suggestions %}
+                    <div class="mb-2">
+                        <strong class="text-info"><i class="bi bi-box me-1"></i>Изменить в упаковке:</strong>
+                        <p class="mb-0 small">{{ analysis.add_packaging_suggestions }}</p>
+                    </div>
+                    {% endif %}
+
+                    {% if analysis.add_taste_suggestions %}
+                    <div class="mb-2">
+                        <strong class="text-success"><i class="bi bi-emoji-smile me-1"></i>Изменить во вкусе:</strong>
+                        <p class="mb-0 small">{{ analysis.add_taste_suggestions }}</p>
+                    </div>
+                    {% endif %}
+
+                    {% else %}
+                    <!-- Insights for competitors -->
+                    {% if analysis.competitor_insights %}
+                    <div class="mb-2">
+                        <strong class="text-primary"><i class="bi bi-lightbulb me-1"></i>Преимущества конкурента:</strong>
+                        <p class="mb-0 small">{{ analysis.competitor_insights }}</p>
+                    </div>
+                    {% endif %}
+                    {% endif %}
+
+                    {% if analysis.key_positive_themes %}
+                    <div class="mb-2">
+                        <strong class="text-muted small">Позитивные темы:</strong>
+                        {% for theme in analysis.key_positive_themes %}
+                        <span class="badge bg-success-subtle text-success me-1">{{ theme }}</span>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+
+                    {% if analysis.key_negative_themes %}
+                    <div>
+                        <strong class="text-muted small">Негативные темы:</strong>
+                        {% for theme in analysis.key_negative_themes %}
+                        <span class="badge bg-danger-subtle text-danger me-1">{{ theme }}</span>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+
+                    {% if not analysis.remove_suggestions and not analysis.add_packaging_suggestions and not analysis.add_taste_suggestions and not analysis.competitor_insights %}
+                    <p class="text-muted small mb-0">Анализ проведён, но рекомендаций не выявлено</p>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            <div class="card-footer text-muted small">
+                <i class="bi bi-info-circle me-1"></i>
+                Выводы сгенерированы AI на основе анализа отзывов
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

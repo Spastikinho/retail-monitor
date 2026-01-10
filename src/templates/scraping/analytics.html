@@ -1,0 +1,463 @@
+{% extends "base.html" %}
+
+{% block title %}Аналитика мониторинга - Retail Monitor{% endblock %}
+
+{% block extra_css %}
+<style>
+    .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 2rem;
+    }
+
+    .page-title {
+        font-size: 1.5rem;
+        font-weight: 600;
+        margin: 0;
+    }
+
+    .period-selector {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .period-select {
+        min-width: 160px;
+    }
+
+    /* Stats Grid */
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 1rem;
+        margin-bottom: 2rem;
+    }
+
+    @media (max-width: 992px) {
+        .stats-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+
+    .stat-card {
+        background: var(--color-surface);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-md);
+        padding: 1.25rem;
+    }
+
+    .stat-value {
+        font-size: 2rem;
+        font-weight: 700;
+        line-height: 1.2;
+        letter-spacing: -0.03em;
+    }
+
+    .stat-value.own { color: var(--color-success); }
+    .stat-value.competitor { color: var(--color-warning); }
+    .stat-value.up { color: var(--color-danger); }
+    .stat-value.down { color: var(--color-success); }
+    .stat-value.negative { color: var(--color-danger); }
+
+    .stat-label {
+        font-size: 0.8rem;
+        color: var(--color-text-muted);
+        margin-top: 0.25rem;
+    }
+
+    /* Section */
+    .section-title {
+        font-size: 1.1rem;
+        font-weight: 600;
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .section-title .badge {
+        font-size: 0.7rem;
+        font-weight: 500;
+    }
+
+    /* Price table */
+    .price-table {
+        background: var(--color-surface);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-md);
+        overflow: hidden;
+    }
+
+    .price-table .table {
+        margin: 0;
+    }
+
+    .price-table .table th {
+        background: var(--color-bg);
+        border-top: none;
+        font-size: 0.8rem;
+        font-weight: 600;
+    }
+
+    .price-up {
+        color: var(--color-danger);
+        font-weight: 600;
+    }
+
+    .price-down {
+        color: var(--color-success);
+        font-weight: 600;
+    }
+
+    .type-badge {
+        display: inline-block;
+        padding: 0.15rem 0.5rem;
+        border-radius: 100px;
+        font-size: 0.7rem;
+        font-weight: 500;
+    }
+
+    .type-badge.own {
+        background: #dcfce7;
+        color: #166534;
+    }
+
+    .type-badge.competitor {
+        background: #fef3c7;
+        color: #92400e;
+    }
+
+    /* Insights */
+    .insight-card {
+        background: var(--color-surface);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-md);
+        padding: 1rem;
+        margin-bottom: 0.75rem;
+    }
+
+    .insight-card.negative {
+        border-left: 4px solid var(--color-danger);
+    }
+
+    .insight-card.positive {
+        border-left: 4px solid var(--color-success);
+    }
+
+    .insight-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 0.5rem;
+    }
+
+    .insight-product {
+        font-weight: 600;
+        font-size: 0.9rem;
+    }
+
+    .insight-topic {
+        font-size: 0.75rem;
+        padding: 0.2rem 0.5rem;
+        border-radius: 4px;
+        background: var(--color-bg);
+    }
+
+    .insight-sample {
+        font-size: 0.8rem;
+        color: var(--color-text-muted);
+        font-style: italic;
+        line-height: 1.4;
+    }
+
+    .insight-count {
+        font-size: 0.75rem;
+        color: var(--color-text-light);
+    }
+
+    /* Empty state */
+    .empty-state {
+        text-align: center;
+        padding: 3rem 2rem;
+        color: var(--color-text-muted);
+    }
+
+    .empty-state i {
+        font-size: 3rem;
+        opacity: 0.3;
+        margin-bottom: 1rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">Аналитика мониторинга</h1>
+    <div class="d-flex gap-2 align-items-center">
+        <div class="period-selector">
+            <label class="text-muted small">Период:</label>
+            <select class="form-select form-select-sm period-select" onchange="window.location.href='?period=' + this.value">
+                {% for period in available_periods %}
+                <option value="{{ period|date:'Y-m' }}" {% if period == current_period %}selected{% endif %}>
+                    {{ period|date:"F Y" }}
+                </option>
+                {% empty %}
+                <option value="{{ current_period|date:'Y-m' }}" selected>{{ current_period|date:"F Y" }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <a href="{% url 'scraping:export_monitoring' %}?period={{ current_period|date:'Y-m' }}" class="btn btn-primary btn-sm">
+            <i class="bi bi-download me-1"></i>
+            Скачать Excel
+        </a>
+    </div>
+</div>
+
+<!-- Stats Overview -->
+<div class="stats-grid">
+    <div class="stat-card">
+        <div class="stat-value own">{{ own_count }}</div>
+        <div class="stat-label">Наших товаров</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value competitor">{{ competitor_count }}</div>
+        <div class="stat-label">Товаров конкурентов</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value up">{{ own_with_price_increase.count }}</div>
+        <div class="stat-label">Повышений цены (наши)</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-value negative">{{ own_with_negative_reviews.count }}</div>
+        <div class="stat-label">С негативными отзывами</div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Price Changes -->
+    <div class="col-lg-6">
+        <div class="section-title">
+            <i class="bi bi-graph-up-arrow text-danger"></i>
+            Повышения цен
+            <span class="badge bg-danger">{{ price_increases.count }}</span>
+        </div>
+
+        {% if price_increases %}
+        <div class="price-table">
+            <div class="table-responsive">
+                <table class="table table-sm">
+                    <thead>
+                        <tr>
+                            <th>Товар</th>
+                            <th>Тип</th>
+                            <th class="text-end">Было</th>
+                            <th class="text-end">Стало</th>
+                            <th class="text-end">Изм.</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for imp in price_increases %}
+                        <tr>
+                            <td>
+                                <a href="{% url 'scraping:import_detail' pk=imp.pk %}" class="text-decoration-none">
+                                    {{ imp.display_name|truncatechars:35 }}
+                                </a>
+                            </td>
+                            <td>
+                                <span class="type-badge {{ imp.product_type }}">
+                                    {% if imp.product_type == 'own' %}Наш{% else %}Конк.{% endif %}
+                                </span>
+                            </td>
+                            <td class="text-end text-muted">{{ imp.price_previous|floatformat:0 }}</td>
+                            <td class="text-end">{{ imp.price_final|floatformat:0 }}</td>
+                            <td class="text-end price-up">+{{ imp.price_change_pct|floatformat:1 }}%</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% else %}
+        <div class="price-table">
+            <div class="empty-state">
+                <i class="bi bi-check-circle d-block"></i>
+                <span>Нет повышений цен</span>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="col-lg-6">
+        <div class="section-title">
+            <i class="bi bi-graph-down-arrow text-success"></i>
+            Снижения цен
+            <span class="badge bg-success">{{ price_decreases.count }}</span>
+        </div>
+
+        {% if price_decreases %}
+        <div class="price-table">
+            <div class="table-responsive">
+                <table class="table table-sm">
+                    <thead>
+                        <tr>
+                            <th>Товар</th>
+                            <th>Тип</th>
+                            <th class="text-end">Было</th>
+                            <th class="text-end">Стало</th>
+                            <th class="text-end">Изм.</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for imp in price_decreases %}
+                        <tr>
+                            <td>
+                                <a href="{% url 'scraping:import_detail' pk=imp.pk %}" class="text-decoration-none">
+                                    {{ imp.display_name|truncatechars:35 }}
+                                </a>
+                            </td>
+                            <td>
+                                <span class="type-badge {{ imp.product_type }}">
+                                    {% if imp.product_type == 'own' %}Наш{% else %}Конк.{% endif %}
+                                </span>
+                            </td>
+                            <td class="text-end text-muted">{{ imp.price_previous|floatformat:0 }}</td>
+                            <td class="text-end">{{ imp.price_final|floatformat:0 }}</td>
+                            <td class="text-end price-down">{{ imp.price_change_pct|floatformat:1 }}%</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% else %}
+        <div class="price-table">
+            <div class="empty-state">
+                <i class="bi bi-dash-circle d-block"></i>
+                <span>Нет снижений цен</span>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Review Insights -->
+<div class="row g-4 mt-2">
+    <div class="col-lg-6">
+        <div class="section-title">
+            <i class="bi bi-exclamation-triangle text-danger"></i>
+            Проблемы в наших товарах
+            <span class="badge bg-danger">{{ negative_feedback|length }}</span>
+        </div>
+
+        {% if negative_feedback %}
+            {% for item in negative_feedback %}
+            <div class="insight-card negative">
+                <div class="insight-header">
+                    <div class="insight-product">{{ item.product|truncatechars:40 }}</div>
+                    <span class="insight-topic">{{ item.topic }}</span>
+                </div>
+                {% if item.samples %}
+                <div class="insight-sample">"{{ item.samples.0|truncatechars:150 }}"</div>
+                {% endif %}
+                <div class="insight-count">{{ item.count }} упоминаний</div>
+            </div>
+            {% endfor %}
+        {% else %}
+        <div class="insight-card">
+            <div class="empty-state" style="padding: 2rem;">
+                <i class="bi bi-emoji-smile d-block"></i>
+                <span>Нет критичных проблем</span>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="col-lg-6">
+        <div class="section-title">
+            <i class="bi bi-lightbulb text-success"></i>
+            Что нравится у конкурентов
+            <span class="badge bg-success">{{ competitor_insights|length }}</span>
+        </div>
+
+        {% if competitor_insights %}
+            {% for item in competitor_insights %}
+            <div class="insight-card positive">
+                <div class="insight-header">
+                    <div class="insight-product">{{ item.product|truncatechars:40 }}</div>
+                    <span class="insight-topic">{{ item.topic }}</span>
+                </div>
+                {% if item.samples %}
+                <div class="insight-sample">"{{ item.samples.0|truncatechars:150 }}"</div>
+                {% endif %}
+                <div class="insight-count">{{ item.count }} позитивных упоминаний</div>
+            </div>
+            {% endfor %}
+        {% else %}
+        <div class="insight-card">
+            <div class="empty-state" style="padding: 2rem;">
+                <i class="bi bi-search d-block"></i>
+                <span>Добавьте товары конкурентов для анализа</span>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Top Competitors -->
+{% if competitor_top_rated %}
+<div class="mt-4">
+    <div class="section-title">
+        <i class="bi bi-star text-warning"></i>
+        Лучшие товары конкурентов
+    </div>
+
+    <div class="price-table">
+        <div class="table-responsive">
+            <table class="table table-sm">
+                <thead>
+                    <tr>
+                        <th>Товар</th>
+                        <th>Магазин</th>
+                        <th class="text-end">Цена</th>
+                        <th class="text-center">Рейтинг</th>
+                        <th class="text-end">Отзывов</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for imp in competitor_top_rated %}
+                    <tr>
+                        <td>
+                            <a href="{% url 'scraping:import_detail' pk=imp.pk %}" class="text-decoration-none">
+                                {{ imp.display_name|truncatechars:45 }}
+                            </a>
+                        </td>
+                        <td class="text-muted">{{ imp.retailer.name|default:"-" }}</td>
+                        <td class="text-end">{{ imp.price_final|floatformat:0|default:"-" }} ₽</td>
+                        <td class="text-center">
+                            <i class="bi bi-star-fill text-warning"></i>
+                            {{ imp.rating|floatformat:1|default:"-" }}
+                        </td>
+                        <td class="text-end">{{ imp.reviews_count|default:0 }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% if not own_count and not competitor_count %}
+<div class="text-center py-5">
+    <i class="bi bi-inbox" style="font-size: 4rem; color: var(--color-border);"></i>
+    <h5 class="mt-3">Нет данных за этот период</h5>
+    <p class="text-muted">Добавьте товары для мониторинга, чтобы увидеть аналитику</p>
+    <a href="{% url 'scraping:monitoring_import' %}" class="btn btn-primary">
+        <i class="bi bi-plus me-1"></i>
+        Добавить товары
+    </a>
+</div>
+{% endif %}
+{% endblock %}

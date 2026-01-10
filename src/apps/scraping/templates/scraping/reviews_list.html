@@ -1,0 +1,187 @@
+{% extends 'base.html' %}
+
+{% block title %}Отзывы — Retail Monitor{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h3 mb-0">Отзывы</h1>
+</div>
+
+<!-- Filters -->
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="get" class="row g-3">
+            <div class="col-md-2">
+                <label class="form-label small">Товар</label>
+                <select name="product" class="form-select form-select-sm">
+                    <option value="">Все товары</option>
+                    {% for product in products %}
+                    <option value="{{ product.pk }}" {% if current_product == product.pk|stringformat:"s" %}selected{% endif %}>
+                        {{ product.name|truncatewords:5 }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small">Ретейлер</label>
+                <select name="retailer" class="form-select form-select-sm">
+                    <option value="">Все ретейлеры</option>
+                    {% for retailer in retailers %}
+                    <option value="{{ retailer.pk }}" {% if current_retailer == retailer.pk|stringformat:"s" %}selected{% endif %}>
+                        {{ retailer.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small">Тональность</label>
+                <select name="sentiment" class="form-select form-select-sm">
+                    <option value="">Любая</option>
+                    {% for value, label in sentiments %}
+                    <option value="{{ value }}" {% if current_sentiment == value %}selected{% endif %}>
+                        {{ label }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-1">
+                <label class="form-label small">Рейтинг</label>
+                <select name="rating" class="form-select form-select-sm">
+                    <option value="">Любой</option>
+                    {% for r in ratings %}
+                    <option value="{{ r }}" {% if current_rating == r|stringformat:"s" %}selected{% endif %}>
+                        {{ r }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small">Тип товара</label>
+                <select name="is_own" class="form-select form-select-sm">
+                    <option value="">Все</option>
+                    <option value="1" {% if current_is_own == '1' %}selected{% endif %}>Наши товары</option>
+                    <option value="0" {% if current_is_own == '0' %}selected{% endif %}>Конкуренты</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small">Поиск</label>
+                <input type="text" name="q" class="form-control form-control-sm" value="{{ current_search }}" placeholder="Текст отзыва...">
+            </div>
+            <div class="col-md-1 d-flex align-items-end">
+                <button type="submit" class="btn btn-primary btn-sm w-100">
+                    <i class="bi bi-search"></i>
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Reviews List -->
+<div class="card">
+    <ul class="list-group list-group-flush">
+        {% for review in reviews %}
+        <li class="list-group-item">
+            <div class="d-flex justify-content-between align-items-start">
+                <div class="me-3 flex-grow-1">
+                    <div class="d-flex align-items-center mb-2">
+                        {% for i in "12345" %}
+                            {% if forloop.counter <= review.rating %}
+                            <i class="bi bi-star-fill text-warning"></i>
+                            {% else %}
+                            <i class="bi bi-star text-muted"></i>
+                            {% endif %}
+                        {% endfor %}
+
+                        {% if review.sentiment == 'negative' %}
+                        <span class="badge bg-danger ms-2">Негативный</span>
+                        {% elif review.sentiment == 'neutral' %}
+                        <span class="badge bg-warning text-dark ms-2">Нейтральный</span>
+                        {% else %}
+                        <span class="badge bg-success ms-2">Позитивный</span>
+                        {% endif %}
+
+                        <span class="ms-3 text-muted small">
+                            <a href="{% url 'products:detail' pk=review.listing.product.pk %}" class="text-decoration-none">
+                                {{ review.listing.product.name|truncatewords:5 }}
+                            </a>
+                            /
+                            {{ review.listing.retailer.name }}
+                        </span>
+                    </div>
+
+                    <p class="mb-2">{{ review.text|truncatewords:100 }}</p>
+
+                    {% if review.pros %}
+                    <p class="mb-1 small text-success">
+                        <strong>Достоинства:</strong> {{ review.pros|truncatewords:30 }}
+                    </p>
+                    {% endif %}
+
+                    {% if review.cons %}
+                    <p class="mb-0 small text-danger">
+                        <strong>Недостатки:</strong> {{ review.cons|truncatewords:30 }}
+                    </p>
+                    {% endif %}
+
+                    {% if review.topics %}
+                    <div class="mt-2">
+                        {% for topic in review.topics %}
+                        <span class="badge bg-light text-dark me-1">{{ topic }}</span>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+                </div>
+
+                <div class="text-end text-muted small" style="min-width: 120px;">
+                    {% if review.author_name %}
+                    <div><i class="bi bi-person me-1"></i>{{ review.author_name }}</div>
+                    {% endif %}
+                    {% if review.published_at %}
+                    <div><i class="bi bi-calendar me-1"></i>{{ review.published_at|date:"d.m.Y" }}</div>
+                    {% endif %}
+                    <div class="mt-2">
+                        {% if review.listing.product.is_own %}
+                        <span class="badge bg-success-subtle text-success">Наш</span>
+                        {% else %}
+                        <span class="badge bg-secondary-subtle text-secondary">Конкурент</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </li>
+        {% empty %}
+        <li class="list-group-item text-center py-5 text-muted">
+            <i class="bi bi-chat-left-text fs-1 d-block mb-3"></i>
+            Отзывов не найдено
+        </li>
+        {% endfor %}
+    </ul>
+</div>
+
+<!-- Pagination -->
+{% if page_obj.has_other_pages %}
+<nav class="mt-4">
+    <ul class="pagination justify-content-center">
+        {% if page_obj.has_previous %}
+        <li class="page-item">
+            <a class="page-link" href="?page={{ page_obj.previous_page_number }}{% if current_product %}&product={{ current_product }}{% endif %}{% if current_retailer %}&retailer={{ current_retailer }}{% endif %}{% if current_sentiment %}&sentiment={{ current_sentiment }}{% endif %}{% if current_rating %}&rating={{ current_rating }}{% endif %}{% if current_is_own %}&is_own={{ current_is_own }}{% endif %}{% if current_search %}&q={{ current_search }}{% endif %}">
+                <i class="bi bi-chevron-left"></i>
+            </a>
+        </li>
+        {% endif %}
+
+        <li class="page-item disabled">
+            <span class="page-link">{{ page_obj.number }} из {{ page_obj.paginator.num_pages }}</span>
+        </li>
+
+        {% if page_obj.has_next %}
+        <li class="page-item">
+            <a class="page-link" href="?page={{ page_obj.next_page_number }}{% if current_product %}&product={{ current_product }}{% endif %}{% if current_retailer %}&retailer={{ current_retailer }}{% endif %}{% if current_sentiment %}&sentiment={{ current_sentiment }}{% endif %}{% if current_rating %}&rating={{ current_rating }}{% endif %}{% if current_is_own %}&is_own={{ current_is_own }}{% endif %}{% if current_search %}&q={{ current_search }}{% endif %}">
+                <i class="bi bi-chevron-right"></i>
+            </a>
+        </li>
+        {% endif %}
+    </ul>
+</nav>
+{% endif %}
+{% endblock %}

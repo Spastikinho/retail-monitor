@@ -1,0 +1,246 @@
+{% extends "base.html" %}
+{% load crispy_forms_tags %}
+
+{% block title %}Импорт ссылок - Retail Monitor{% endblock %}
+
+{% block extra_css %}
+<style>
+    .page-header {
+        margin-bottom: 2rem;
+    }
+
+    .page-title {
+        font-size: 1.5rem;
+        font-weight: 600;
+        color: var(--color-text);
+        margin: 0;
+    }
+
+    .page-subtitle {
+        color: var(--color-text-muted);
+        font-size: 0.9rem;
+        margin-top: 0.25rem;
+    }
+
+    .import-form-card {
+        border: none;
+        box-shadow: var(--shadow-md);
+    }
+
+    .import-form-card .card-body {
+        padding: 1.75rem;
+    }
+
+    .urls-textarea {
+        font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace;
+        font-size: 0.8rem;
+        line-height: 1.6;
+        min-height: 180px;
+        resize: vertical;
+    }
+
+    .retailer-tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 0.75rem;
+        background: var(--color-bg);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-sm);
+        font-size: 0.8rem;
+        color: var(--color-text);
+    }
+
+    .retailer-tag .retailer-icon {
+        width: 20px;
+        height: 20px;
+        border-radius: 4px;
+        background: var(--color-accent);
+        color: #fff;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.65rem;
+        font-weight: 600;
+    }
+
+    .recent-import-item {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        padding: 0.875rem 1rem;
+        border-bottom: 1px solid var(--color-border);
+        transition: background 0.15s ease;
+    }
+
+    .recent-import-item:hover {
+        background: var(--color-bg);
+    }
+
+    .recent-import-item:last-child {
+        border-bottom: none;
+    }
+
+    .import-title {
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: var(--color-text);
+        margin-bottom: 0.25rem;
+        line-height: 1.4;
+    }
+
+    .import-price {
+        font-size: 0.8rem;
+        color: var(--color-text-muted);
+    }
+
+    .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        flex-shrink: 0;
+        margin-top: 6px;
+    }
+
+    .status-dot.pending { background: #9ca3af; }
+    .status-dot.processing { background: var(--color-info); animation: pulse 1.5s infinite; }
+    .status-dot.completed { background: var(--color-success); }
+    .status-dot.failed { background: var(--color-danger); }
+
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+    }
+
+    .empty-state {
+        padding: 2rem;
+        text-align: center;
+        color: var(--color-text-muted);
+    }
+
+    .empty-state i {
+        font-size: 2rem;
+        margin-bottom: 0.75rem;
+        opacity: 0.4;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">Импорт ссылок</h1>
+    <p class="page-subtitle">Добавьте ссылки на товары для сбора данных о ценах и отзывах</p>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-8">
+        <div class="card import-form-card">
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+
+                    <div class="mb-4">
+                        <label for="id_urls" class="form-label">Ссылки на товары</label>
+                        <textarea
+                            name="urls"
+                            id="id_urls"
+                            class="form-control urls-textarea"
+                            placeholder="https://www.ozon.ru/product/...&#10;https://www.wildberries.ru/catalog/...&#10;https://www.perekrestok.ru/cat/..."
+                        >{{ form.urls.value|default:"" }}</textarea>
+                        <div class="form-text">Вставьте ссылки на товары, по одной на строку. Максимум 20 ссылок за раз.</div>
+                        {% if form.urls.errors %}
+                        <div class="invalid-feedback d-block">
+                            {% for error in form.urls.errors %}{{ error }}{% endfor %}
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    <div class="mb-4">
+                        <div class="form-check">
+                            <input type="checkbox" name="scrape_reviews" id="id_scrape_reviews" class="form-check-input" {% if form.scrape_reviews.value %}checked{% endif %}>
+                            <label class="form-check-label" for="id_scrape_reviews">
+                                Собирать отзывы
+                            </label>
+                            <div class="form-text">Если включено, система также соберёт отзывы покупателей</div>
+                        </div>
+                    </div>
+
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-arrow-right me-1"></i>
+                            Начать сбор
+                        </button>
+                        <a href="{% url 'scraping:import_list' %}" class="btn btn-outline-secondary">
+                            <i class="bi bi-clock-history me-1"></i>
+                            История
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Supported retailers -->
+        <div class="card mt-4">
+            <div class="card-header">
+                <span>Поддерживаемые магазины</span>
+            </div>
+            <div class="card-body">
+                <div class="d-flex flex-wrap gap-2">
+                    <div class="retailer-tag">
+                        <span class="retailer-icon">O</span>
+                        <span>ozon.ru</span>
+                    </div>
+                    <div class="retailer-tag">
+                        <span class="retailer-icon">W</span>
+                        <span>wildberries.ru</span>
+                    </div>
+                    <div class="retailer-tag">
+                        <span class="retailer-icon">P</span>
+                        <span>perekrestok.ru</span>
+                    </div>
+                    <div class="retailer-tag">
+                        <span class="retailer-icon">V</span>
+                        <span>vkusvill.ru</span>
+                    </div>
+                    <div class="retailer-tag">
+                        <span class="retailer-icon">L</span>
+                        <span>lavka.yandex.ru</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent imports sidebar -->
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>Последние импорты</span>
+                {% if recent_imports %}
+                <a href="{% url 'scraping:import_list' %}" class="text-muted" style="font-size: 0.8rem;">Все</a>
+                {% endif %}
+            </div>
+            <div style="max-height: 480px; overflow-y: auto;">
+                {% for imp in recent_imports %}
+                <a href="{% url 'scraping:import_detail' pk=imp.pk %}" class="recent-import-item text-decoration-none">
+                    <div style="flex: 1; min-width: 0;">
+                        <div class="import-title text-truncate">
+                            {{ imp.product_title|default:imp.url|truncatechars:45 }}
+                        </div>
+                        {% if imp.price_final %}
+                        <div class="import-price">{{ imp.price_final }} ₽</div>
+                        {% endif %}
+                    </div>
+                    <div class="status-dot {{ imp.status }}" title="{% if imp.status == 'pending' %}Ожидает{% elif imp.status == 'processing' %}Обработка{% elif imp.status == 'completed' %}Готово{% else %}Ошибка{% endif %}"></div>
+                </a>
+                {% empty %}
+                <div class="empty-state">
+                    <i class="bi bi-inbox d-block"></i>
+                    <span>Нет импортов</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

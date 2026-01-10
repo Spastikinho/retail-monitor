@@ -1,0 +1,80 @@
+{% extends 'base.html' %}
+{% load crispy_forms_tags %}
+
+{% block title %}Импорт товаров — Retail Monitor{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{% url 'products:list' %}">Товары</a></li>
+        <li class="breadcrumb-item active">Импорт</li>
+    </ol>
+</nav>
+
+<div class="row">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Импорт товаров из файла</h5>
+            </div>
+            <div class="card-body">
+                <form method="post" enctype="multipart/form-data">
+                    {% csrf_token %}
+                    {{ form|crispy }}
+
+                    <div class="d-flex gap-2 mt-4">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-upload me-1"></i> Импортировать
+                        </button>
+                        <a href="{% url 'products:list' %}" class="btn btn-outline-secondary">Отмена</a>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Формат файла</h5>
+            </div>
+            <div class="card-body">
+                <p>Поддерживаемые форматы: <strong>Excel (.xlsx)</strong> и <strong>CSV</strong></p>
+
+                <h6>Обязательные колонки:</h6>
+                <ul>
+                    <li><code>Название</code> (или <code>name</code>)</li>
+                    <li><code>Бренд</code> (или <code>brand</code>)</li>
+                </ul>
+
+                <h6>Опциональные колонки:</h6>
+                <ul class="small">
+                    <li><code>Наш товар</code> — "Да"/"Нет"</li>
+                    <li><code>Тип продукта</code></li>
+                    <li><code>Упаковка</code> — дой-пак, коробка, пакет, лоток, банка</li>
+                    <li><code>Вес (г)</code></li>
+                    <li><code>Калибр</code></li>
+                    <li><code>Косточка</code> — "Да"/"Нет"</li>
+                    <li><code>Сорт</code></li>
+                    <li><code>Заметки</code></li>
+                </ul>
+
+                <h6>Колонки для ссылок:</h6>
+                <ul class="small">
+                    <li><code>URL Ozon</code> или <code>Ozon</code></li>
+                    <li><code>URL ВкусВилл</code> или <code>ВкусВилл</code></li>
+                    <li><code>URL Перекрёсток</code> или <code>Перекрёсток</code></li>
+                    <li><code>URL Лавка</code> или <code>Лавка</code></li>
+                </ul>
+
+                <hr>
+                <p class="mb-0">
+                    <a href="{% url 'products:export' %}" class="btn btn-sm btn-outline-primary">
+                        <i class="bi bi-download me-1"></i> Скачать шаблон (текущие товары)
+                    </a>
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

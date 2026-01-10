@@ -1,0 +1,714 @@
+{% extends 'base.html' %}
+
+{% block title %}Dashboard — Retail Monitor{% endblock %}
+
+{% block extra_css %}
+<style>
+    .chart-container {
+        position: relative;
+        height: 250px;
+    }
+    .chart-container-sm {
+        position: relative;
+        height: 200px;
+    }
+    .stat-card {
+        transition: transform 0.2s;
+    }
+    .stat-card:hover {
+        transform: translateY(-2px);
+    }
+    .sparkline-container {
+        height: 40px;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h3 mb-0">Dashboard</h1>
+    <div class="d-flex gap-2">
+        <button type="button" class="btn btn-outline-secondary" onclick="refreshCharts()">
+            <i class="bi bi-arrow-clockwise me-1"></i> Обновить
+        </button>
+        <form method="post" action="{% url 'scraping:run' %}" class="d-inline">
+            {% csrf_token %}
+            <button type="submit" class="btn btn-primary">
+                <i class="bi bi-play-fill me-1"></i> Запустить сбор данных
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Key Metrics Row -->
+<div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+        <div class="card h-100 border-0 shadow-sm stat-card">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="flex-shrink-0">
+                        <div class="bg-primary bg-opacity-10 rounded-3 p-3">
+                            <i class="bi bi-box-seam fs-4 text-primary"></i>
+                        </div>
+                    </div>
+                    <div class="flex-grow-1 ms-3">
+                        <h6 class="text-muted mb-1 small">Товаров</h6>
+                        <h3 class="mb-0">{{ products_count }}</h3>
+                        <small class="text-muted">{{ products_own_count }} своих / {{ products_competitor_count }} конкур.</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-6 col-md-3">
+        <div class="card h-100 border-0 shadow-sm stat-card">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="flex-shrink-0">
+                        <div class="bg-success bg-opacity-10 rounded-3 p-3">
+                            <i class="bi bi-link-45deg fs-4 text-success"></i>
+                        </div>
+                    </div>
+                    <div class="flex-grow-1 ms-3">
+                        <h6 class="text-muted mb-1 small">Листингов</h6>
+                        <h3 class="mb-0">{{ listings_count }}</h3>
+                        <small class="text-muted">активных</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-6 col-md-3">
+        <div class="card h-100 border-0 shadow-sm stat-card">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="flex-shrink-0">
+                        <div class="bg-info bg-opacity-10 rounded-3 p-3">
+                            <i class="bi bi-camera fs-4 text-info"></i>
+                        </div>
+                    </div>
+                    <div class="flex-grow-1 ms-3">
+                        <h6 class="text-muted mb-1 small">Снимков цен</h6>
+                        <h3 class="mb-0">{{ snapshots_count }}</h3>
+                        <small class="text-muted">{{ snapshots_30d }} за 30 дней</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-6 col-md-3">
+        <div class="card h-100 border-0 shadow-sm stat-card">
+            <div class="card-body">
+                <div class="d-flex align-items-center">
+                    <div class="flex-shrink-0">
+                        <div class="bg-warning bg-opacity-10 rounded-3 p-3">
+                            <i class="bi bi-chat-dots fs-4 text-warning"></i>
+                        </div>
+                    </div>
+                    <div class="flex-grow-1 ms-3">
+                        <h6 class="text-muted mb-1 small">Отзывов</h6>
+                        <h3 class="mb-0">{{ reviews_total }}</h3>
+                        <small class="text-muted {% if reviews_negative > 0 %}text-danger{% endif %}">{{ reviews_negative }} негативных</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts Row -->
+<div class="row g-4 mb-4">
+    <!-- Price Trends Chart -->
+    <div class="col-md-8">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-header bg-transparent border-0">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-graph-up me-2 text-primary"></i>Динамика цен
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="chart-container">
+                    <canvas id="priceTrendsChart"></canvas>
+                </div>
+                <div id="priceTrendsEmpty" class="text-center text-muted py-5 d-none">
+                    <i class="bi bi-graph-up fs-1 mb-2"></i>
+                    <p class="mb-0">Нет данных о ценах</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Reviews Distribution -->
+    <div class="col-md-4">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-header bg-transparent border-0">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-star me-2 text-warning"></i>Распределение отзывов
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="chart-container">
+                    <canvas id="reviewsDistChart"></canvas>
+                </div>
+                <div id="reviewsDistEmpty" class="text-center text-muted py-5 d-none">
+                    <i class="bi bi-star fs-1 mb-2"></i>
+                    <p class="mb-0">Нет отзывов</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Second Charts Row -->
+<div class="row g-4 mb-4">
+    <!-- Reviews Trend -->
+    <div class="col-md-6">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-header bg-transparent border-0">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-chat-left-text me-2 text-info"></i>Тренд отзывов
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="chart-container-sm">
+                    <canvas id="reviewsTrendChart"></canvas>
+                </div>
+                <div id="reviewsTrendEmpty" class="text-center text-muted py-4 d-none">
+                    <p class="mb-0">Нет данных за период</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scraping Activity -->
+    <div class="col-md-6">
+        <div class="card border-0 shadow-sm h-100">
+            <div class="card-header bg-transparent border-0">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-activity me-2 text-success"></i>Активность сбора данных
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="chart-container-sm">
+                    <canvas id="scrapingActivityChart"></canvas>
+                </div>
+                <div id="scrapingActivityEmpty" class="text-center text-muted py-4 d-none">
+                    <p class="mb-0">Нет данных за период</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Alerts Row -->
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="card h-100 border-0 shadow-sm">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="card-title mb-0">
+                        <i class="bi bi-bell me-2 text-danger"></i>Оповещения
+                    </h6>
+                    <a href="{% url 'alerts:rule_list' %}" class="btn btn-sm btn-outline-secondary">
+                        Все правила
+                    </a>
+                </div>
+                <div class="row text-center">
+                    <div class="col-4">
+                        <h4 class="mb-0">{{ alerts_active }}</h4>
+                        <small class="text-muted">активных</small>
+                    </div>
+                    <div class="col-4">
+                        <h4 class="mb-0 {% if alert_events_7d > 0 %}text-warning{% endif %}">{{ alert_events_7d }}</h4>
+                        <small class="text-muted">за 7 дней</small>
+                    </div>
+                    <div class="col-4">
+                        <h4 class="mb-0 {% if alert_events_pending > 0 %}text-danger{% endif %}">{{ alert_events_pending }}</h4>
+                        <small class="text-muted">ожидает</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card h-100 border-0 shadow-sm">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="card-title mb-0">
+                        <i class="bi bi-clock-history me-2 text-primary"></i>Сбор данных
+                    </h6>
+                    <a href="{% url 'scraping:session_list' %}" class="btn btn-sm btn-outline-secondary">
+                        История
+                    </a>
+                </div>
+                <div class="row text-center">
+                    <div class="col-6">
+                        <h4 class="mb-0">{{ sessions_success_30d }}/{{ sessions_30d }}</h4>
+                        <small class="text-muted">успешных за 30д</small>
+                    </div>
+                    <div class="col-6">
+                        {% if last_session %}
+                        <h6 class="mb-0">{{ last_session.finished_at|date:"d.m H:i" }}</h6>
+                        <small class="text-muted">последний</small>
+                        {% else %}
+                        <h6 class="mb-0 text-muted">—</h6>
+                        <small class="text-muted">нет данных</small>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-4">
+        <div class="card h-100 border-0 shadow-sm">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h6 class="card-title mb-0">
+                        <i class="bi bi-robot me-2 text-success"></i>AI Анализ
+                    </h6>
+                    <a href="{% url 'analytics:analysis_list' %}" class="btn btn-sm btn-outline-secondary">
+                        Отчёты
+                    </a>
+                </div>
+                <div class="row text-center">
+                    <div class="col-6">
+                        <h4 class="mb-0">{{ reviews_30d }}</h4>
+                        <small class="text-muted">отзывов за 30д</small>
+                    </div>
+                    <div class="col-6">
+                        <h4 class="mb-0 {% if reviews_unprocessed > 0 %}text-warning{% endif %}">{{ reviews_unprocessed }}</h4>
+                        <small class="text-muted">не обработано</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4">
+    <!-- Retailers Overview -->
+    <div class="col-md-6">
+        <div class="card h-100 border-0 shadow-sm">
+            <div class="card-header bg-transparent border-0">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-shop me-2"></i>Ретейлеры
+                </h5>
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Ретейлер</th>
+                                <th class="text-center">Листингов</th>
+                                <th class="text-center">Средний рейтинг</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for item in retailer_ratings %}
+                            <tr>
+                                <td>
+                                    <a href="{% url 'retailers:detail' item.retailer.slug %}" class="text-decoration-none">
+                                        {{ item.retailer.name }}
+                                    </a>
+                                </td>
+                                <td class="text-center">{{ item.listings_count }}</td>
+                                <td class="text-center">
+                                    {% if item.avg_rating %}
+                                    <span class="badge {% if item.avg_rating >= 4.5 %}bg-success{% elif item.avg_rating >= 4 %}bg-primary{% elif item.avg_rating >= 3 %}bg-warning{% else %}bg-danger{% endif %}">
+                                        {{ item.avg_rating }}
+                                    </span>
+                                    {% else %}
+                                    <span class="text-muted">—</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% empty %}
+                            <tr>
+                                <td colspan="3" class="text-center text-muted py-4">
+                                    Нет активных ретейлеров
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Products Requiring Attention -->
+    <div class="col-md-6">
+        <div class="card h-100 border-0 shadow-sm">
+            <div class="card-header bg-transparent border-0">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-exclamation-triangle me-2 text-warning"></i>Требуют внимания
+                </h5>
+            </div>
+            <div class="card-body p-0">
+                {% if products_with_issues %}
+                <div class="list-group list-group-flush">
+                    {% for item in products_with_issues %}
+                    <a href="{% url 'products:detail' item.product.pk %}" class="list-group-item list-group-item-action">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <strong>{{ item.product.name }}</strong>
+                                <br>
+                                <small class="text-muted">{{ item.product.brand }}</small>
+                            </div>
+                            <div class="text-end">
+                                {% if item.avg_rating %}
+                                <span class="badge {% if item.avg_rating < 3 %}bg-danger{% elif item.avg_rating < 4 %}bg-warning{% else %}bg-secondary{% endif %}">
+                                    {{ item.avg_rating }}
+                                </span>
+                                {% endif %}
+                                {% if item.negative_reviews > 0 %}
+                                <span class="badge bg-danger">{{ item.negative_reviews }} негатив.</span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </a>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center text-muted py-5">
+                    <i class="bi bi-check-circle fs-1 text-success mb-2"></i>
+                    <p class="mb-0">Все товары в норме</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4 mt-2">
+    <!-- Recent Alert Events -->
+    <div class="col-md-6">
+        <div class="card h-100 border-0 shadow-sm">
+            <div class="card-header bg-transparent border-0 d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-lightning me-2 text-danger"></i>Последние события
+                </h5>
+                <a href="{% url 'alerts:event_list' %}" class="btn btn-sm btn-outline-secondary">Все</a>
+            </div>
+            <div class="card-body p-0">
+                {% if recent_alerts %}
+                <div class="list-group list-group-flush">
+                    {% for event in recent_alerts %}
+                    <a href="{% url 'alerts:event_detail' event.pk %}" class="list-group-item list-group-item-action">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <span class="badge {% if event.is_delivered %}bg-success{% else %}bg-warning{% endif %} me-1">
+                                    {% if event.is_delivered %}Доставлено{% else %}Ожидает{% endif %}
+                                </span>
+                                <strong>{{ event.alert_rule.name }}</strong>
+                                <br>
+                                <small class="text-muted">
+                                    {{ event.listing.product.name }} @ {{ event.listing.retailer.name }}
+                                </small>
+                            </div>
+                            <small class="text-muted">{{ event.triggered_at|timesince }} назад</small>
+                        </div>
+                    </a>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center text-muted py-5">
+                    <i class="bi bi-bell-slash fs-1 mb-2"></i>
+                    <p class="mb-0">Нет событий</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Scraping Sessions -->
+    <div class="col-md-6">
+        <div class="card h-100 border-0 shadow-sm">
+            <div class="card-header bg-transparent border-0 d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-cloud-download me-2 text-info"></i>Последние сборы
+                </h5>
+                <a href="{% url 'scraping:session_list' %}" class="btn btn-sm btn-outline-secondary">Все</a>
+            </div>
+            <div class="card-body p-0">
+                {% if recent_sessions %}
+                <div class="list-group list-group-flush">
+                    {% for session in recent_sessions %}
+                    <a href="{% url 'scraping:session_detail' session.pk %}" class="list-group-item list-group-item-action">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <span class="badge
+                                    {% if session.status == 'completed' %}bg-success
+                                    {% elif session.status == 'running' %}bg-primary
+                                    {% elif session.status == 'failed' %}bg-danger
+                                    {% else %}bg-secondary{% endif %} me-1">
+                                    {{ session.get_status_display }}
+                                </span>
+                                {% if session.retailer %}
+                                    {{ session.retailer.name }}
+                                {% else %}
+                                    Все ретейлеры
+                                {% endif %}
+                                <br>
+                                <small class="text-muted">
+                                    {{ session.listings_success }}/{{ session.listings_total }} успешно
+                                </small>
+                            </div>
+                            <small class="text-muted">{{ session.created_at|timesince }} назад</small>
+                        </div>
+                    </a>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div class="text-center text-muted py-5">
+                    <i class="bi bi-inbox fs-1 mb-2"></i>
+                    <p class="mb-0">Нет сессий</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Quick Actions -->
+<div class="row g-4 mt-2">
+    <div class="col-12">
+        <div class="card border-0 shadow-sm">
+            <div class="card-header bg-transparent border-0">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-lightning-charge me-2"></i>Быстрые действия
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="row g-3">
+                    <div class="col-md-3">
+                        <a href="{% url 'products:create' %}" class="btn btn-outline-success w-100 py-3">
+                            <i class="bi bi-plus-circle fs-4 d-block mb-1"></i>
+                            Добавить товар
+                        </a>
+                    </div>
+                    <div class="col-md-3">
+                        <a href="{% url 'alerts:rule_create' %}" class="btn btn-outline-danger w-100 py-3">
+                            <i class="bi bi-bell-plus fs-4 d-block mb-1"></i>
+                            Создать правило
+                        </a>
+                    </div>
+                    <div class="col-md-3">
+                        <a href="{% url 'reports:export' %}" class="btn btn-outline-primary w-100 py-3">
+                            <i class="bi bi-file-earmark-excel fs-4 d-block mb-1"></i>
+                            Экспорт в Excel
+                        </a>
+                    </div>
+                    <div class="col-md-3">
+                        <a href="{% url 'analytics:generate' %}" class="btn btn-outline-info w-100 py-3">
+                            <i class="bi bi-cpu fs-4 d-block mb-1"></i>
+                            Запустить анализ
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+<script>
+// Chart instances
+let priceTrendsChart = null;
+let reviewsDistChart = null;
+let reviewsTrendChart = null;
+let scrapingActivityChart = null;
+
+// Chart default options
+Chart.defaults.font.family = "'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif";
+Chart.defaults.responsive = true;
+Chart.defaults.maintainAspectRatio = false;
+
+// Load price trends chart
+async function loadPriceTrends() {
+    try {
+        const response = await fetch('{% url "core:api_price_trends" %}');
+        const data = await response.json();
+
+        const ctx = document.getElementById('priceTrendsChart').getContext('2d');
+        const emptyDiv = document.getElementById('priceTrendsEmpty');
+
+        if (!data.labels || data.labels.length === 0) {
+            document.getElementById('priceTrendsChart').style.display = 'none';
+            emptyDiv.classList.remove('d-none');
+            return;
+        }
+
+        if (priceTrendsChart) priceTrendsChart.destroy();
+
+        priceTrendsChart = new Chart(ctx, {
+            type: 'line',
+            data: data,
+            options: {
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: false,
+                        ticks: {
+                            callback: value => value.toLocaleString('ru-RU') + ' ₽'
+                        }
+                    }
+                },
+                interaction: {
+                    intersect: false,
+                    mode: 'index',
+                },
+            }
+        });
+    } catch (error) {
+        console.error('Error loading price trends:', error);
+    }
+}
+
+// Load reviews distribution chart
+async function loadReviewsDist() {
+    try {
+        const response = await fetch('{% url "core:api_reviews_by_rating" %}');
+        const data = await response.json();
+
+        const ctx = document.getElementById('reviewsDistChart').getContext('2d');
+        const emptyDiv = document.getElementById('reviewsDistEmpty');
+
+        const hasData = data.datasets && data.datasets[0] && data.datasets[0].data.some(v => v > 0);
+        if (!hasData) {
+            document.getElementById('reviewsDistChart').style.display = 'none';
+            emptyDiv.classList.remove('d-none');
+            return;
+        }
+
+        if (reviewsDistChart) reviewsDistChart.destroy();
+
+        reviewsDistChart = new Chart(ctx, {
+            type: 'doughnut',
+            data: data,
+            options: {
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                    }
+                },
+                cutout: '60%',
+            }
+        });
+    } catch (error) {
+        console.error('Error loading reviews distribution:', error);
+    }
+}
+
+// Load reviews trend chart
+async function loadReviewsTrend() {
+    try {
+        const response = await fetch('{% url "core:api_reviews_trend" %}');
+        const data = await response.json();
+
+        const ctx = document.getElementById('reviewsTrendChart').getContext('2d');
+        const emptyDiv = document.getElementById('reviewsTrendEmpty');
+
+        if (!data.labels || data.labels.length === 0) {
+            document.getElementById('reviewsTrendChart').style.display = 'none';
+            emptyDiv.classList.remove('d-none');
+            return;
+        }
+
+        if (reviewsTrendChart) reviewsTrendChart.destroy();
+
+        reviewsTrendChart = new Chart(ctx, {
+            type: 'bar',
+            data: data,
+            options: {
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                    }
+                },
+                scales: {
+                    x: {
+                        stacked: true,
+                    },
+                    y: {
+                        stacked: true,
+                        beginAtZero: true,
+                    }
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Error loading reviews trend:', error);
+    }
+}
+
+// Load scraping activity chart
+async function loadScrapingActivity() {
+    try {
+        const response = await fetch('{% url "core:api_scraping_activity" %}');
+        const data = await response.json();
+
+        const ctx = document.getElementById('scrapingActivityChart').getContext('2d');
+        const emptyDiv = document.getElementById('scrapingActivityEmpty');
+
+        if (!data.labels || data.labels.length === 0) {
+            document.getElementById('scrapingActivityChart').style.display = 'none';
+            emptyDiv.classList.remove('d-none');
+            return;
+        }
+
+        if (scrapingActivityChart) scrapingActivityChart.destroy();
+
+        scrapingActivityChart = new Chart(ctx, {
+            type: 'bar',
+            data: data,
+            options: {
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                    }
+                },
+                scales: {
+                    x: {
+                        stacked: true,
+                    },
+                    y: {
+                        stacked: true,
+                        beginAtZero: true,
+                    }
+                }
+            }
+        });
+    } catch (error) {
+        console.error('Error loading scraping activity:', error);
+    }
+}
+
+// Refresh all charts
+function refreshCharts() {
+    loadPriceTrends();
+    loadReviewsDist();
+    loadReviewsTrend();
+    loadScrapingActivity();
+}
+
+// Load charts on page load
+document.addEventListener('DOMContentLoaded', function() {
+    refreshCharts();
+});
+</script>
+{% endblock %}

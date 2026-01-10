@@ -1,0 +1,148 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ rule.name }} — Оповещения — Retail Monitor{% endblock %}
+
+{% block content %}
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="{% url 'alerts:rule_list' %}">Оповещения</a></li>
+        <li class="breadcrumb-item active">{{ rule.name }}</li>
+    </ol>
+</nav>
+
+<div class="d-flex justify-content-between align-items-start mb-4">
+    <div>
+        <h1 class="h3 mb-1">{{ rule.name }}</h1>
+        <p class="text-muted mb-0">
+            {% if rule.alert_type == 'price_increase' %}
+            <span class="badge bg-danger-subtle text-danger">{{ rule.get_alert_type_display }}</span>
+            {% elif rule.alert_type == 'price_decrease' %}
+            <span class="badge bg-success-subtle text-success">{{ rule.get_alert_type_display }}</span>
+            {% elif rule.alert_type == 'new_negative_review' %}
+            <span class="badge bg-warning-subtle text-warning">{{ rule.get_alert_type_display }}</span>
+            {% else %}
+            <span class="badge bg-info-subtle text-info">{{ rule.get_alert_type_display }}</span>
+            {% endif %}
+
+            {% if rule.is_active %}
+            <span class="badge bg-success ms-2">Активно</span>
+            {% else %}
+            <span class="badge bg-secondary ms-2">Неактивно</span>
+            {% endif %}
+        </p>
+    </div>
+    <div>
+        <a href="{% url 'alerts:rule_edit' pk=rule.pk %}" class="btn btn-outline-secondary">
+            <i class="bi bi-pencil me-1"></i> Редактировать
+        </a>
+        <a href="{% url 'alerts:rule_delete' pk=rule.pk %}" class="btn btn-outline-danger">
+            <i class="bi bi-trash me-1"></i> Удалить
+        </a>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Rule Details -->
+    <div class="col-md-4">
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="card-title mb-0">Настройки</h5>
+            </div>
+            <div class="card-body">
+                <dl class="row mb-0">
+                    <dt class="col-sm-5">Область</dt>
+                    <dd class="col-sm-7">
+                        {% if rule.product %}
+                        {{ rule.product.name }}
+                        {% elif rule.retailer %}
+                        {{ rule.retailer.name }}
+                        {% else %}
+                        Все товары
+                        {% endif %}
+                    </dd>
+
+                    {% if rule.threshold_pct %}
+                    <dt class="col-sm-5">Порог</dt>
+                    <dd class="col-sm-7">{{ rule.threshold_pct }}%</dd>
+                    {% endif %}
+
+                    {% if rule.threshold_rating %}
+                    <dt class="col-sm-5">Порог рейтинга</dt>
+                    <dd class="col-sm-7">{{ rule.threshold_rating }} звёзд</dd>
+                    {% endif %}
+
+                    <dt class="col-sm-5">Канал</dt>
+                    <dd class="col-sm-7">
+                        {% if rule.channel == 'telegram' %}
+                        <i class="bi bi-telegram text-primary me-1"></i> Telegram
+                        {% else %}
+                        <i class="bi bi-envelope me-1"></i> Email
+                        {% endif %}
+                    </dd>
+
+                    <dt class="col-sm-5">Пауза</dt>
+                    <dd class="col-sm-7">{{ rule.cooldown_hours }} ч.</dd>
+
+                    <dt class="col-sm-5">Получатели</dt>
+                    <dd class="col-sm-7">
+                        {% if rule.recipients %}
+                        <code class="small">{{ rule.recipients }}</code>
+                        {% else %}
+                        <span class="text-muted">По умолчанию</span>
+                        {% endif %}
+                    </dd>
+                </dl>
+            </div>
+        </div>
+    </div>
+
+    <!-- Recent Events -->
+    <div class="col-md-8">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="card-title mb-0">Последние события</h5>
+                <a href="{% url 'alerts:event_list' %}?rule={{ rule.pk }}" class="btn btn-sm btn-outline-primary">
+                    Все события
+                </a>
+            </div>
+            <ul class="list-group list-group-flush">
+                {% for event in events %}
+                <li class="list-group-item">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <div class="fw-medium">
+                                {{ event.listing.product.name|truncatewords:5 }}
+                                <span class="text-muted">/ {{ event.listing.retailer.name }}</span>
+                            </div>
+                            <p class="mb-1 small">{{ event.message }}</p>
+                            {% if event.details.old_price and event.details.new_price %}
+                            <span class="badge bg-light text-dark">
+                                {{ event.details.old_price }} ₽ → {{ event.details.new_price }} ₽
+                            </span>
+                            {% endif %}
+                            {% if event.details.rating %}
+                            <span class="badge bg-warning text-dark">
+                                {% for i in "12345" %}{% if forloop.counter <= event.details.rating %}<i class="bi bi-star-fill"></i>{% endif %}{% endfor %}
+                            </span>
+                            {% endif %}
+                        </div>
+                        <div class="text-end">
+                            <div class="text-muted small">{{ event.triggered_at|date:"d.m.Y H:i" }}</div>
+                            {% if event.is_delivered %}
+                            <span class="badge bg-success-subtle text-success">Доставлено</span>
+                            {% else %}
+                            <span class="badge bg-warning-subtle text-warning">Ожидает</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </li>
+                {% empty %}
+                <li class="list-group-item text-center py-4 text-muted">
+                    Событий пока нет
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+</div>
+{% endblock %}

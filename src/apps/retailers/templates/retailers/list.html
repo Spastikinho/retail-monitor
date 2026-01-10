@@ -1,0 +1,57 @@
+{% extends 'base.html' %}
+
+{% block title %}Ретейлеры — Retail Monitor{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h1 class="h3 mb-0">Ретейлеры</h1>
+</div>
+
+<div class="row g-4">
+    {% for retailer in retailers %}
+    <div class="col-md-6 col-lg-4">
+        <div class="card h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start mb-3">
+                    <h5 class="card-title mb-0">{{ retailer.name }}</h5>
+                    {% if retailer.is_active %}
+                    <span class="badge bg-success">Активен</span>
+                    {% else %}
+                    <span class="badge bg-secondary">Неактивен</span>
+                    {% endif %}
+                </div>
+                <p class="card-text text-muted small">
+                    <i class="bi bi-link-45deg me-1"></i>
+                    <a href="{{ retailer.base_url }}" target="_blank">{{ retailer.base_url }}</a>
+                </p>
+                <div class="d-flex justify-content-between align-items-center">
+                    <span class="text-muted small">
+                        <i class="bi bi-box-seam me-1"></i>
+                        {{ retailer.listings.count }} листингов
+                    </span>
+                    <span class="text-muted small">
+                        {% if retailer.requires_auth %}
+                        <i class="bi bi-lock me-1"></i> Требует авторизации
+                        {% else %}
+                        <i class="bi bi-unlock me-1"></i> Публичный
+                        {% endif %}
+                    </span>
+                </div>
+            </div>
+            <div class="card-footer bg-transparent">
+                <a href="{% url 'admin:retailers_retailer_change' retailer.pk %}" class="btn btn-sm btn-outline-secondary">
+                    <i class="bi bi-gear me-1"></i> Настройки
+                </a>
+            </div>
+        </div>
+    </div>
+    {% empty %}
+    <div class="col-12">
+        <div class="alert alert-info">
+            <i class="bi bi-info-circle me-2"></i>
+            Ретейлеры не настроены. Добавьте их через <a href="{% url 'admin:retailers_retailer_add' %}">админку</a>.
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

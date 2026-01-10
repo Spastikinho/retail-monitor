@@ -1,0 +1,360 @@
+{% extends "base.html" %}
+{% load crispy_forms_tags %}
+
+{% block title %}Мониторинг товаров - Retail Monitor{% endblock %}
+
+{% block extra_css %}
+<style>
+    .page-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 2rem;
+    }
+
+    .page-title {
+        font-size: 1.5rem;
+        font-weight: 600;
+        color: var(--color-text);
+        margin: 0;
+    }
+
+    .page-subtitle {
+        color: var(--color-text-muted);
+        font-size: 0.9rem;
+        margin-top: 0.25rem;
+    }
+
+    .import-form-card {
+        border: none;
+        box-shadow: var(--shadow-md);
+    }
+
+    .import-form-card .card-body {
+        padding: 1.75rem;
+    }
+
+    .urls-textarea {
+        font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace;
+        font-size: 0.8rem;
+        line-height: 1.6;
+        min-height: 140px;
+        resize: vertical;
+    }
+
+    .type-selector {
+        display: flex;
+        gap: 1rem;
+        margin-bottom: 1rem;
+    }
+
+    .type-option {
+        flex: 1;
+        border: 2px solid var(--color-border);
+        border-radius: var(--radius-md);
+        padding: 1rem;
+        cursor: pointer;
+        transition: all 0.15s ease;
+    }
+
+    .type-option:hover {
+        border-color: var(--color-accent);
+    }
+
+    .type-option.selected {
+        border-color: var(--color-accent);
+        background: rgba(37, 99, 235, 0.05);
+    }
+
+    .type-option input {
+        display: none;
+    }
+
+    .type-option-title {
+        font-weight: 600;
+        margin-bottom: 0.25rem;
+    }
+
+    .type-option-desc {
+        font-size: 0.8rem;
+        color: var(--color-text-muted);
+    }
+
+    .type-own { border-left: 4px solid var(--color-success); }
+    .type-competitor { border-left: 4px solid var(--color-warning); }
+
+    .section-label {
+        font-weight: 600;
+        font-size: 0.875rem;
+        margin-bottom: 0.75rem;
+        color: var(--color-text);
+    }
+
+    .help-text {
+        font-size: 0.8rem;
+        color: var(--color-text-muted);
+    }
+
+    .recent-import-item {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        padding: 0.75rem 1rem;
+        border-bottom: 1px solid var(--color-border);
+        transition: background 0.15s ease;
+    }
+
+    .recent-import-item:hover {
+        background: var(--color-bg);
+    }
+
+    .recent-import-item:last-child {
+        border-bottom: none;
+    }
+
+    .import-title {
+        font-size: 0.875rem;
+        font-weight: 500;
+        color: var(--color-text);
+        margin-bottom: 0.15rem;
+    }
+
+    .import-meta {
+        font-size: 0.75rem;
+        color: var(--color-text-muted);
+    }
+
+    .type-badge {
+        display: inline-block;
+        padding: 0.15rem 0.5rem;
+        border-radius: 100px;
+        font-size: 0.7rem;
+        font-weight: 500;
+    }
+
+    .type-badge.own {
+        background: #dcfce7;
+        color: #166534;
+    }
+
+    .type-badge.competitor {
+        background: #fef3c7;
+        color: #92400e;
+    }
+
+    .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        flex-shrink: 0;
+    }
+
+    .status-dot.pending { background: #9ca3af; }
+    .status-dot.processing { background: var(--color-info); animation: pulse 1.5s infinite; }
+    .status-dot.completed { background: var(--color-success); }
+    .status-dot.failed { background: var(--color-danger); }
+
+    @keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+    }
+
+    .quick-actions {
+        display: flex;
+        gap: 0.5rem;
+        margin-top: 1rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Мониторинг товаров</h1>
+        <p class="page-subtitle">Добавьте товары для отслеживания цен и анализа отзывов</p>
+    </div>
+    <div class="d-flex gap-2">
+        <a href="{% url 'scraping:analytics' %}" class="btn btn-outline-primary">
+            <i class="bi bi-graph-up me-1"></i>
+            Аналитика
+        </a>
+        <a href="{% url 'scraping:export_monitoring' %}" class="btn btn-outline-secondary">
+            <i class="bi bi-download me-1"></i>
+            Excel
+        </a>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-8">
+        <div class="card import-form-card">
+            <div class="card-body">
+                <form method="post">
+                    {% csrf_token %}
+
+                    <!-- Product Type Selector -->
+                    <div class="mb-4">
+                        <div class="section-label">Тип товара</div>
+                        <div class="type-selector">
+                            <label class="type-option type-own" id="type-own-option">
+                                <input type="radio" name="product_type" value="own" {% if form.product_type.value == 'own' %}checked{% endif %}>
+                                <div class="type-option-title">Наш товар</div>
+                                <div class="type-option-desc">Отслеживать негативные отзывы для улучшения продукта</div>
+                            </label>
+                            <label class="type-option type-competitor" id="type-competitor-option">
+                                <input type="radio" name="product_type" value="competitor" {% if form.product_type.value != 'own' %}checked{% endif %}>
+                                <div class="type-option-title">Конкурент</div>
+                                <div class="type-option-desc">Изучать позитивные отзывы для заимствования решений</div>
+                            </label>
+                        </div>
+                    </div>
+
+                    <!-- URLs -->
+                    <div class="mb-4">
+                        <label for="id_urls" class="form-label">Ссылки на товары</label>
+                        <textarea
+                            name="urls"
+                            id="id_urls"
+                            class="form-control urls-textarea"
+                            placeholder="https://www.ozon.ru/product/...&#10;https://www.wildberries.ru/catalog/..."
+                        >{{ form.urls.value|default:"" }}</textarea>
+                        <div class="form-text">По одной ссылке на строку. Максимум 20 за раз.</div>
+                        {% if form.urls.errors %}
+                        <div class="invalid-feedback d-block">
+                            {% for error in form.urls.errors %}{{ error }}{% endfor %}
+                        </div>
+                        {% endif %}
+                    </div>
+
+                    <div class="row g-3 mb-4">
+                        <!-- Group -->
+                        <div class="col-md-6">
+                            <label for="id_group" class="form-label">Группа (опционально)</label>
+                            <div class="input-group">
+                                {{ form.group }}
+                                <a href="{% url 'scraping:group_create' %}" class="btn btn-outline-secondary" title="Создать группу">
+                                    <i class="bi bi-plus"></i>
+                                </a>
+                            </div>
+                        </div>
+
+                        <!-- Custom Name -->
+                        <div class="col-md-6">
+                            <label for="id_custom_name" class="form-label">Своё название</label>
+                            {{ form.custom_name }}
+                        </div>
+                    </div>
+
+                    <!-- Checkboxes -->
+                    <div class="mb-4">
+                        <div class="form-check mb-2">
+                            <input type="checkbox" name="scrape_reviews" id="id_scrape_reviews" class="form-check-input" {% if form.scrape_reviews.value != False %}checked{% endif %}>
+                            <label class="form-check-label" for="id_scrape_reviews">
+                                Собирать и анализировать отзывы
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input type="checkbox" name="is_recurring" id="id_is_recurring" class="form-check-input" {% if form.is_recurring.value %}checked{% endif %}>
+                            <label class="form-check-label" for="id_is_recurring">
+                                Ежемесячный мониторинг (1-го числа)
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="d-flex gap-2">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="bi bi-arrow-right me-1"></i>
+                            Начать мониторинг
+                        </button>
+                        <a href="{% url 'scraping:import_list' %}" class="btn btn-outline-secondary">
+                            <i class="bi bi-clock-history me-1"></i>
+                            История
+                        </a>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Groups management link -->
+        <div class="mt-3 text-center">
+            <a href="{% url 'scraping:group_list' %}" class="text-muted small">
+                <i class="bi bi-folder me-1"></i>
+                Управление группами
+            </a>
+        </div>
+    </div>
+
+    <!-- Sidebar -->
+    <div class="col-lg-4">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span>Последние импорты</span>
+                {% if recent_imports %}
+                <a href="{% url 'scraping:import_list' %}" class="text-muted" style="font-size: 0.8rem;">Все</a>
+                {% endif %}
+            </div>
+            <div style="max-height: 400px; overflow-y: auto;">
+                {% for imp in recent_imports %}
+                <a href="{% url 'scraping:import_detail' pk=imp.pk %}" class="recent-import-item text-decoration-none">
+                    <div style="flex: 1; min-width: 0;">
+                        <div class="import-title text-truncate">
+                            {{ imp.display_name|truncatechars:40 }}
+                        </div>
+                        <div class="import-meta">
+                            <span class="type-badge {{ imp.product_type }}">
+                                {% if imp.product_type == 'own' %}Наш{% else %}Конкурент{% endif %}
+                            </span>
+                            {% if imp.price_final %}
+                            <span class="ms-2">{{ imp.price_final }} ₽</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="status-dot {{ imp.status }}" title="{{ imp.get_status_display }}"></div>
+                </a>
+                {% empty %}
+                <div class="p-4 text-center text-muted">
+                    <i class="bi bi-inbox d-block mb-2" style="font-size: 2rem; opacity: 0.4;"></i>
+                    <span>Нет импортов</span>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Quick info -->
+        <div class="card mt-3">
+            <div class="card-header">Как это работает</div>
+            <div class="card-body">
+                <ul class="mb-0 ps-3" style="font-size: 0.85rem;">
+                    <li class="mb-2"><strong>Наши товары:</strong> отслеживаем негативные отзывы, чтобы улучшить продукт</li>
+                    <li class="mb-2"><strong>Конкуренты:</strong> изучаем позитивные отзывы, чтобы перенять лучшие решения</li>
+                    <li class="mb-2"><strong>Цены:</strong> фиксируем изменения для корректировки своих цен</li>
+                    <li><strong>Excel:</strong> выгружайте данные для анализа</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const options = document.querySelectorAll('.type-option');
+
+    options.forEach(option => {
+        const input = option.querySelector('input');
+
+        // Initial state
+        if (input.checked) {
+            option.classList.add('selected');
+        }
+
+        option.addEventListener('click', function() {
+            options.forEach(o => o.classList.remove('selected'));
+            this.classList.add('selected');
+            this.querySelector('input').checked = true;
+        });
+    });
+});
+</script>
+{% endblock %}

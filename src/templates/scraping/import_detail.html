@@ -1,0 +1,750 @@
+{% extends "base.html" %}
+
+{% block title %}{{ import_obj.product_title|default:"Результат импорта" }} - Retail Monitor{% endblock %}
+
+{% block extra_css %}
+<style>
+    .page-header {
+        margin-bottom: 2rem;
+    }
+
+    .breadcrumb {
+        background: transparent;
+        padding: 0;
+        margin-bottom: 1rem;
+    }
+
+    .product-title {
+        font-size: 1.35rem;
+        font-weight: 600;
+        margin: 0;
+        line-height: 1.4;
+    }
+
+    .product-meta {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        margin-top: 0.5rem;
+        flex-wrap: wrap;
+    }
+
+    .retailer-tag {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.35rem 0.65rem;
+        background: var(--color-accent-bg);
+        border-radius: 100px;
+        font-size: 0.8rem;
+        font-weight: 500;
+        color: var(--color-accent);
+    }
+
+    .retailer-tag i {
+        font-size: 0.9rem;
+    }
+
+    .status-indicator {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        font-size: 0.8rem;
+        color: var(--color-text-muted);
+    }
+
+    .status-indicator.processing { color: var(--color-info); }
+    .status-indicator.completed { color: var(--color-success); }
+    .status-indicator.failed { color: var(--color-danger); }
+
+    /* Data cards */
+    .data-card {
+        background: var(--color-surface);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-md);
+        margin-bottom: 1.5rem;
+    }
+
+    .data-card-header {
+        padding: 1rem 1.25rem;
+        border-bottom: 1px solid var(--color-border);
+        font-weight: 600;
+        font-size: 0.9rem;
+    }
+
+    .data-card-body {
+        padding: 1.25rem;
+    }
+
+    /* Metrics grid */
+    .metrics-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1rem;
+    }
+
+    @media (max-width: 576px) {
+        .metrics-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    .metric-item {
+        padding: 1rem;
+        background: var(--color-bg);
+        border-radius: var(--radius-sm);
+    }
+
+    .metric-label {
+        font-size: 0.75rem;
+        color: var(--color-text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        margin-bottom: 0.35rem;
+    }
+
+    .metric-value {
+        font-size: 1.25rem;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+    }
+
+    .metric-value.promo {
+        color: var(--color-success);
+    }
+
+    .metric-value.final {
+        font-size: 1.5rem;
+    }
+
+    .metric-sub {
+        font-size: 0.8rem;
+        color: var(--color-text-muted);
+    }
+
+    /* URL display */
+    .url-display {
+        padding: 0.875rem 1rem;
+        background: var(--color-bg);
+        border-radius: var(--radius-sm);
+        font-size: 0.8rem;
+        font-family: 'SF Mono', 'Monaco', 'Inconsolata', monospace;
+        word-break: break-all;
+    }
+
+    .url-display a {
+        color: var(--color-text-muted);
+    }
+
+    .url-display a:hover {
+        color: var(--color-accent);
+    }
+
+    /* Reviews */
+    .reviews-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .reviews-count {
+        font-size: 0.8rem;
+        color: var(--color-text-muted);
+    }
+
+    .review-item {
+        padding: 1.25rem;
+        border-bottom: 1px solid var(--color-border);
+    }
+
+    .review-item:last-child {
+        border-bottom: none;
+    }
+
+    .review-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-start;
+        margin-bottom: 0.75rem;
+    }
+
+    .review-rating {
+        display: flex;
+        gap: 2px;
+    }
+
+    .review-rating i {
+        font-size: 0.875rem;
+    }
+
+    .star-filled { color: #f59e0b; }
+    .star-empty { color: #e5e7eb; }
+
+    .review-author {
+        font-weight: 500;
+        font-size: 0.875rem;
+        margin-left: 0.5rem;
+    }
+
+    .review-date {
+        font-size: 0.8rem;
+        color: var(--color-text-light);
+    }
+
+    .review-text {
+        font-size: 0.9rem;
+        line-height: 1.6;
+        color: var(--color-text);
+        margin-bottom: 0.75rem;
+    }
+
+    .review-pros, .review-cons {
+        font-size: 0.85rem;
+        margin-bottom: 0.35rem;
+    }
+
+    .review-pros {
+        color: var(--color-success);
+    }
+
+    .review-cons {
+        color: var(--color-danger);
+    }
+
+    /* Sidebar */
+    .sidebar-card {
+        background: var(--color-surface);
+        border: 1px solid var(--color-border);
+        border-radius: var(--radius-md);
+        margin-bottom: 1rem;
+    }
+
+    .sidebar-card-header {
+        padding: 0.875rem 1rem;
+        border-bottom: 1px solid var(--color-border);
+        font-weight: 600;
+        font-size: 0.8rem;
+        color: var(--color-text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+    }
+
+    .sidebar-card-body {
+        padding: 1rem;
+    }
+
+    .action-btn {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        padding: 0.625rem 1rem;
+        border-radius: var(--radius-sm);
+        font-size: 0.875rem;
+        font-weight: 500;
+        width: 100%;
+        margin-bottom: 0.5rem;
+        transition: all 0.15s ease;
+    }
+
+    .action-btn:last-child {
+        margin-bottom: 0;
+    }
+
+    /* Rating distribution */
+    .rating-row {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .rating-row:last-child {
+        margin-bottom: 0;
+    }
+
+    .rating-stars {
+        display: flex;
+        gap: 1px;
+        font-size: 0.7rem;
+    }
+
+    .rating-bar {
+        flex: 1;
+        height: 6px;
+        background: var(--color-border);
+        border-radius: 100px;
+        overflow: hidden;
+    }
+
+    .rating-bar-fill {
+        height: 100%;
+        background: #f59e0b;
+        border-radius: 100px;
+    }
+
+    .rating-count {
+        font-size: 0.75rem;
+        color: var(--color-text-muted);
+        min-width: 24px;
+        text-align: right;
+    }
+
+    /* Timestamps */
+    .timestamps {
+        font-size: 0.8rem;
+        color: var(--color-text-muted);
+        padding-top: 1rem;
+        border-top: 1px solid var(--color-border);
+        margin-top: 1rem;
+    }
+
+    /* Alert styling */
+    .status-alert {
+        padding: 1rem 1.25rem;
+        border-radius: var(--radius-sm);
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        margin-bottom: 1.25rem;
+    }
+
+    .status-alert.processing {
+        background: #eff6ff;
+        color: var(--color-info);
+    }
+
+    .status-alert.failed {
+        background: #fef2f2;
+        color: var(--color-danger);
+    }
+
+    .status-alert i {
+        font-size: 1.1rem;
+    }
+
+    /* Type badge */
+    .type-badge {
+        display: inline-block;
+        padding: 0.25rem 0.6rem;
+        border-radius: 100px;
+        font-size: 0.75rem;
+        font-weight: 500;
+    }
+
+    .type-badge.own {
+        background: #dcfce7;
+        color: #166534;
+    }
+
+    .type-badge.competitor {
+        background: #fef3c7;
+        color: #92400e;
+    }
+
+    /* Price change */
+    .price-change {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        font-size: 0.85rem;
+        font-weight: 500;
+        padding: 0.25rem 0.5rem;
+        border-radius: 4px;
+    }
+
+    .price-change.up {
+        background: #fef2f2;
+        color: var(--color-danger);
+    }
+
+    .price-change.down {
+        background: #ecfdf5;
+        color: var(--color-success);
+    }
+
+    /* Insights */
+    .insights-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.75rem;
+    }
+
+    @media (max-width: 576px) {
+        .insights-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    .insight-item {
+        padding: 0.75rem;
+        background: var(--color-bg);
+        border-radius: var(--radius-sm);
+    }
+
+    .insight-label {
+        font-size: 0.7rem;
+        text-transform: uppercase;
+        color: var(--color-text-muted);
+        margin-bottom: 0.25rem;
+    }
+
+    .insight-counts {
+        display: flex;
+        gap: 0.75rem;
+        font-size: 0.85rem;
+    }
+
+    .insight-pos { color: var(--color-success); }
+    .insight-neg { color: var(--color-danger); }
+    .insight-neu { color: var(--color-text-muted); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <nav aria-label="breadcrumb">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="{% url 'scraping:import_list' %}">Импорты</a></li>
+            <li class="breadcrumb-item active">{{ import_obj.product_title|default:"Результат"|truncatechars:40 }}</li>
+        </ol>
+    </nav>
+
+    <h1 class="product-title">{{ import_obj.custom_name|default:import_obj.product_title|default:"Ожидание данных..." }}</h1>
+
+    <div class="product-meta">
+        <span class="type-badge {{ import_obj.product_type }}">
+            {% if import_obj.product_type == 'own' %}Наш товар{% else %}Конкурент{% endif %}
+        </span>
+
+        {% if import_obj.retailer %}
+        <span class="retailer-tag">
+            <i class="bi bi-shop"></i>
+            {{ import_obj.retailer.name }}
+        </span>
+        {% endif %}
+
+        {% if import_obj.group %}
+        <span class="text-muted small">
+            <i class="bi bi-folder me-1"></i>{{ import_obj.group.name }}
+        </span>
+        {% endif %}
+
+        <span class="status-indicator {{ import_obj.status }}">
+            {% if import_obj.status == 'completed' %}
+                <i class="bi bi-check-circle"></i> Готово
+            {% elif import_obj.status == 'processing' %}
+                <span class="spinner-border spinner-border-sm"></span> Обрабатывается
+            {% elif import_obj.status == 'failed' %}
+                <i class="bi bi-x-circle"></i> Ошибка
+            {% else %}
+                <i class="bi bi-clock"></i> Ожидает
+            {% endif %}
+        </span>
+    </div>
+</div>
+
+<div class="row g-4">
+    <div class="col-lg-8">
+        <!-- Status alerts -->
+        {% if import_obj.status == 'failed' %}
+        <div class="status-alert failed">
+            <i class="bi bi-exclamation-triangle"></i>
+            <span>{{ import_obj.error_message }}</span>
+        </div>
+        {% endif %}
+
+        {% if import_obj.status == 'processing' or import_obj.status == 'pending' %}
+        <div class="status-alert processing">
+            <i class="bi bi-hourglass-split"></i>
+            <span>Данные обрабатываются. Страница обновится автоматически.</span>
+        </div>
+        {% endif %}
+
+        <!-- Metrics -->
+        {% if import_obj.status == 'completed' %}
+        <div class="data-card">
+            <div class="data-card-body">
+                <div class="metrics-grid">
+                    <div class="metric-item">
+                        <div class="metric-label">Обычная цена</div>
+                        <div class="metric-value">
+                            {% if import_obj.price_regular %}
+                                {{ import_obj.price_regular }} <span class="metric-sub">₽</span>
+                            {% else %}
+                                <span class="text-muted">-</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-label">Акционная цена</div>
+                        <div class="metric-value promo">
+                            {% if import_obj.price_promo %}
+                                {{ import_obj.price_promo }} <span class="metric-sub">₽</span>
+                            {% else %}
+                                <span class="text-muted">-</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-label">Итоговая цена</div>
+                        <div class="metric-value final">
+                            {% if import_obj.price_final %}
+                                {{ import_obj.price_final }} <span class="metric-sub">₽</span>
+                                {% if import_obj.price_change %}
+                                <span class="price-change {% if import_obj.price_change > 0 %}up{% else %}down{% endif %}">
+                                    {% if import_obj.price_change > 0 %}+{% endif %}{{ import_obj.price_change_pct|floatformat:1 }}%
+                                </span>
+                                {% endif %}
+                            {% else %}
+                                <span class="text-muted">-</span>
+                            {% endif %}
+                        </div>
+                        {% if import_obj.price_previous %}
+                        <div class="metric-sub">Было: {{ import_obj.price_previous }} ₽</div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="metrics-grid" style="margin-top: 1rem;">
+                    <div class="metric-item">
+                        <div class="metric-label">Рейтинг</div>
+                        <div class="metric-value">
+                            {% if import_obj.rating %}
+                                <i class="bi bi-star-fill" style="color: #f59e0b; font-size: 0.9em;"></i>
+                                {{ import_obj.rating }}
+                            {% else %}
+                                <span class="text-muted">-</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-label">Отзывов</div>
+                        <div class="metric-value">
+                            {% if import_obj.reviews_count %}
+                                {{ import_obj.reviews_count }}
+                            {% else %}
+                                <span class="text-muted">-</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="metric-item">
+                        <div class="metric-label">Наличие</div>
+                        <div class="metric-value">
+                            {% if import_obj.in_stock == True %}
+                                <span style="color: var(--color-success);">В наличии</span>
+                            {% elif import_obj.in_stock == False %}
+                                <span style="color: var(--color-danger);">Нет</span>
+                            {% else %}
+                                <span class="text-muted">-</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        <!-- URL -->
+        <div class="data-card">
+            <div class="data-card-header">Источник</div>
+            <div class="data-card-body" style="padding-top: 0.875rem; padding-bottom: 0.875rem;">
+                <div class="url-display">
+                    <a href="{{ import_obj.url }}" target="_blank" rel="noopener">
+                        {{ import_obj.url }}
+                        <i class="bi bi-box-arrow-up-right ms-1"></i>
+                    </a>
+                </div>
+
+                <div class="timestamps">
+                    Создано: {{ import_obj.created_at|date:"d.m.Y H:i" }}
+                    {% if import_obj.processed_at %}
+                        <span class="mx-2">·</span>
+                        Обработано: {{ import_obj.processed_at|date:"d.m.Y H:i" }}
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Reviews -->
+        {% if import_obj.reviews_data %}
+        <div class="data-card">
+            <div class="data-card-header reviews-header">
+                <span>Отзывы</span>
+                <span class="reviews-count">{{ import_obj.reviews_data|length }} шт.</span>
+            </div>
+            <div>
+                {% for review in import_obj.reviews_data %}
+                <div class="review-item">
+                    <div class="review-header">
+                        <div class="d-flex align-items-center">
+                            <div class="review-rating">
+                                {% for i in "12345" %}
+                                    {% if forloop.counter <= review.rating %}
+                                        <i class="bi bi-star-fill star-filled"></i>
+                                    {% else %}
+                                        <i class="bi bi-star-fill star-empty"></i>
+                                    {% endif %}
+                                {% endfor %}
+                            </div>
+                            <span class="review-author">{{ review.author|default:"Аноним" }}</span>
+                        </div>
+                        {% if review.date %}
+                        <span class="review-date">{{ review.date }}</span>
+                        {% endif %}
+                    </div>
+
+                    {% if review.text %}
+                    <p class="review-text">{{ review.text }}</p>
+                    {% endif %}
+
+                    {% if review.pros %}
+                    <p class="review-pros">
+                        <i class="bi bi-plus-circle me-1"></i>
+                        {{ review.pros }}
+                    </p>
+                    {% endif %}
+
+                    {% if review.cons %}
+                    <p class="review-cons mb-0">
+                        <i class="bi bi-dash-circle me-1"></i>
+                        {{ review.cons }}
+                    </p>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Sidebar -->
+    <div class="col-lg-4">
+        <div class="sidebar-card">
+            <div class="sidebar-card-header">Действия</div>
+            <div class="sidebar-card-body">
+                {% if import_obj.status == 'completed' %}
+                <a href="{% url 'scraping:export_single' pk=import_obj.pk %}" class="btn btn-primary action-btn">
+                    <i class="bi bi-download"></i>
+                    Скачать Excel
+                </a>
+                {% endif %}
+
+                <a href="{{ import_obj.url }}" target="_blank" class="btn btn-outline-primary action-btn">
+                    <i class="bi bi-box-arrow-up-right"></i>
+                    Открыть на сайте
+                </a>
+
+                <a href="{% url 'scraping:monitoring_import' %}" class="btn btn-outline-secondary action-btn">
+                    <i class="bi bi-plus"></i>
+                    Новый импорт
+                </a>
+
+                <form method="post" action="{% url 'scraping:import_delete' pk=import_obj.pk %}" onsubmit="return confirm('Удалить эту запись?');">
+                    {% csrf_token %}
+                    <button type="submit" class="btn btn-outline-danger action-btn">
+                        <i class="bi bi-trash"></i>
+                        Удалить
+                    </button>
+                </form>
+            </div>
+        </div>
+
+        <!-- Review Insights -->
+        {% if import_obj.review_insights.topics %}
+        <div class="sidebar-card">
+            <div class="sidebar-card-header">Анализ отзывов</div>
+            <div class="sidebar-card-body">
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between mb-2">
+                        <span class="insight-pos"><i class="bi bi-emoji-smile me-1"></i>{{ import_obj.reviews_positive_count }}</span>
+                        <span class="insight-neu"><i class="bi bi-emoji-neutral me-1"></i>{{ import_obj.reviews_neutral_count }}</span>
+                        <span class="insight-neg"><i class="bi bi-emoji-frown me-1"></i>{{ import_obj.reviews_negative_count }}</span>
+                    </div>
+                </div>
+
+                <div class="insights-grid">
+                    {% with topics=import_obj.review_insights.topics %}
+                    {% if topics.taste.mentions %}
+                    <div class="insight-item">
+                        <div class="insight-label">Вкус</div>
+                        <div class="insight-counts">
+                            <span class="insight-pos">+{{ topics.taste.positive }}</span>
+                            <span class="insight-neg">-{{ topics.taste.negative }}</span>
+                        </div>
+                    </div>
+                    {% endif %}
+                    {% if topics.packaging.mentions %}
+                    <div class="insight-item">
+                        <div class="insight-label">Упаковка</div>
+                        <div class="insight-counts">
+                            <span class="insight-pos">+{{ topics.packaging.positive }}</span>
+                            <span class="insight-neg">-{{ topics.packaging.negative }}</span>
+                        </div>
+                    </div>
+                    {% endif %}
+                    {% if topics.quality.mentions %}
+                    <div class="insight-item">
+                        <div class="insight-label">Качество</div>
+                        <div class="insight-counts">
+                            <span class="insight-pos">+{{ topics.quality.positive }}</span>
+                            <span class="insight-neg">-{{ topics.quality.negative }}</span>
+                        </div>
+                    </div>
+                    {% endif %}
+                    {% if topics.price.mentions %}
+                    <div class="insight-item">
+                        <div class="insight-label">Цена</div>
+                        <div class="insight-counts">
+                            <span class="insight-pos">+{{ topics.price.positive }}</span>
+                            <span class="insight-neg">-{{ topics.price.negative }}</span>
+                        </div>
+                    </div>
+                    {% endif %}
+                    {% endwith %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
+        {% if import_obj.reviews_data %}
+        <div class="sidebar-card">
+            <div class="sidebar-card-header">Распределение оценок</div>
+            <div class="sidebar-card-body">
+                {% with reviews=import_obj.reviews_data %}
+                {% regroup reviews by rating as rating_list %}
+                {% for rating_group in rating_list|dictsortreversed:"grouper" %}
+                <div class="rating-row">
+                    <div class="rating-stars">
+                        {% for i in "12345" %}
+                            {% if forloop.counter <= rating_group.grouper %}
+                                <i class="bi bi-star-fill star-filled"></i>
+                            {% else %}
+                                <i class="bi bi-star-fill star-empty"></i>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+                    <div class="rating-bar">
+                        <div class="rating-bar-fill" style="width: {% widthratio rating_group.list|length reviews|length 100 %}%;"></div>
+                    </div>
+                    <span class="rating-count">{{ rating_group.list|length }}</span>
+                </div>
+                {% endfor %}
+                {% endwith %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Auto-refresh if processing
+{% if import_obj.status == 'pending' or import_obj.status == 'processing' %}
+setTimeout(function() {
+    location.reload();
+}, 5000);
+{% endif %}
+</script>
+{% endblock %}

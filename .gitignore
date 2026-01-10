@@ -82,3 +82,5 @@ browser_profiles/
 *.pem
 *.key
 secrets/
+.vercel
+.env*.local

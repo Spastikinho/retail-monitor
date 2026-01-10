@@ -11,10 +11,16 @@ import {
   BarChart3,
   Settings,
   RefreshCw,
+  Upload,
+  Download,
+  FolderKanban,
 } from 'lucide-react';
 
 const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
+  { name: 'Import URLs', href: '/import', icon: Upload },
+  { name: 'Export Data', href: '/export', icon: Download },
+  { name: 'Monitoring', href: '/monitoring', icon: FolderKanban },
   { name: 'Products', href: '/products', icon: Package },
   { name: 'Retailers', href: '/retailers', icon: Store },
   { name: 'Alerts', href: '/alerts', icon: Bell },

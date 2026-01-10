@@ -651,3 +651,441 @@ def export_products(request):
         })
     except Exception as e:
         return api_error(f'Error exporting products: {str(e)}', 500)
+
+
+# ============= Manual Import API =============
+
+@csrf_exempt
+@require_POST
+def import_urls(request):
+    """
+    Import URLs for scraping.
+
+    POST body (JSON):
+        - urls: List of URLs to import (max 20)
+        - product_type: 'own' or 'competitor' (default: 'competitor')
+        - group_id: Optional monitoring group ID
+    """
+    try:
+        from apps.scraping.models import ManualImport, MonitoringGroup
+        from apps.scraping.tasks import process_manual_import
+
+        try:
+            body = json.loads(request.body) if request.body else {}
+        except json.JSONDecodeError:
+            return api_error('Invalid JSON body')
+
+        urls = body.get('urls', [])
+        product_type = body.get('product_type', 'competitor')
+        group_id = body.get('group_id')
+
+        if not urls:
+            return api_error('No URLs provided')
+
+        if len(urls) > 20:
+            return api_error('Maximum 20 URLs per request')
+
+        # Validate product_type
+        if product_type not in ['own', 'competitor']:
+            product_type = 'competitor'
+
+        # Get group if specified
+        group = None
+        if group_id:
+            try:
+                group = MonitoringGroup.objects.get(pk=group_id)
+            except MonitoringGroup.DoesNotExist:
+                pass
+
+        # Get or create a default user for API imports
+        from django.contrib.auth import get_user_model
+        User = get_user_model()
+        user = request.user if request.user.is_authenticated else User.objects.first()
+
+        if not user:
+            return api_error('No user available for import', 500)
+
+        created_imports = []
+        errors = []
+
+        for url in urls:
+            url = url.strip()
+            if not url:
+                continue
+
+            # Check for supported retailers
+            supported = False
+            for pattern in ['ozon.ru', 'wildberries.ru', 'wb.ru', 'perekrestok.ru',
+                           'vkusvill.ru', 'lavka.yandex.ru', 'eda.yandex.ru/lavka']:
+                if pattern in url.lower():
+                    supported = True
+                    break
+
+            if not supported:
+                errors.append(f'Unsupported retailer: {url[:50]}')
+                continue
+
+            try:
+                import_obj = ManualImport.objects.create(
+                    user=user,
+                    url=url,
+                    product_type=product_type,
+                    group=group,
+                )
+                created_imports.append({
+                    'id': str(import_obj.id),
+                    'url': url,
+                    'retailer': import_obj.retailer.name if import_obj.retailer else None,
+                    'status': import_obj.status,
+                })
+
+                # Queue for processing
+                process_manual_import.delay(str(import_obj.pk))
+
+            except Exception as e:
+                errors.append(f'Error creating import for {url[:30]}: {str(e)}')
+
+        return json_response({
+            'success': True,
+            'message': f'Created {len(created_imports)} imports',
+            'imports': created_imports,
+            'errors': errors,
+        })
+
+    except Exception as e:
+        return api_error(f'Error importing URLs: {str(e)}', 500)
+
+
+@require_GET
+def import_list(request):
+    """
+    List manual imports with optional filtering.
+
+    Query params:
+        - status: Filter by status (pending, processing, completed, failed)
+        - product_type: Filter by type (own, competitor)
+        - period: Filter by period (YYYY-MM)
+        - limit: Max results (default 50)
+        - offset: Pagination offset
+    """
+    try:
+        from apps.scraping.models import ManualImport
+
+        imports = ManualImport.objects.all().select_related('retailer', 'group')
+
+        # Apply filters
+        if request.GET.get('status'):
+            imports = imports.filter(status=request.GET.get('status'))
+
+        if request.GET.get('product_type'):
+            imports = imports.filter(product_type=request.GET.get('product_type'))
+
+        if request.GET.get('period'):
+            try:
+                from datetime import datetime
+                period = datetime.strptime(request.GET.get('period'), '%Y-%m').date()
+                imports = imports.filter(monitoring_period=period.replace(day=1))
+            except ValueError:
+                pass
+
+        # Pagination
+        limit = min(int(request.GET.get('limit', 50)), 100)
+        offset = int(request.GET.get('offset', 0))
+
+        total = imports.count()
+        imports = imports.order_by('-created_at')[offset:offset + limit]
+
+        data = {
+            'success': True,
+            'total': total,
+            'imports': [
+                {
+                    'id': str(imp.id),
+                    'url': imp.url,
+                    'retailer': imp.retailer.name if imp.retailer else None,
+                    'product_type': imp.product_type,
+                    'product_title': imp.product_title,
+                    'custom_name': imp.custom_name,
+                    'status': imp.status,
+                    'price_final': float(imp.price_final) if imp.price_final else None,
+                    'price_change': float(imp.price_change) if imp.price_change else None,
+                    'price_change_pct': float(imp.price_change_pct) if imp.price_change_pct else None,
+                    'rating': float(imp.rating) if imp.rating else None,
+                    'reviews_count': imp.reviews_count,
+                    'in_stock': imp.in_stock,
+                    'reviews_positive': imp.reviews_positive_count,
+                    'reviews_negative': imp.reviews_negative_count,
+                    'monitoring_period': imp.monitoring_period.isoformat() if imp.monitoring_period else None,
+                    'created_at': imp.created_at.isoformat(),
+                    'processed_at': imp.processed_at.isoformat() if imp.processed_at else None,
+                    'error_message': imp.error_message if imp.status == 'failed' else None,
+                }
+                for imp in imports
+            ]
+        }
+
+        return json_response(data)
+
+    except Exception as e:
+        return api_error(f'Error fetching imports: {str(e)}', 500)
+
+
+@require_GET
+def import_detail(request, import_id):
+    """Get detailed import info including reviews."""
+    try:
+        from apps.scraping.models import ManualImport
+
+        try:
+            imp = ManualImport.objects.select_related('retailer', 'group').get(pk=import_id)
+        except ManualImport.DoesNotExist:
+            return api_error('Import not found', 404)
+
+        data = {
+            'success': True,
+            'import': {
+                'id': str(imp.id),
+                'url': imp.url,
+                'retailer': imp.retailer.name if imp.retailer else None,
+                'product_type': imp.product_type,
+                'product_title': imp.product_title,
+                'custom_name': imp.custom_name,
+                'notes': imp.notes,
+                'status': imp.status,
+                'price_regular': float(imp.price_regular) if imp.price_regular else None,
+                'price_promo': float(imp.price_promo) if imp.price_promo else None,
+                'price_final': float(imp.price_final) if imp.price_final else None,
+                'price_previous': float(imp.price_previous) if imp.price_previous else None,
+                'price_change': float(imp.price_change) if imp.price_change else None,
+                'price_change_pct': float(imp.price_change_pct) if imp.price_change_pct else None,
+                'rating': float(imp.rating) if imp.rating else None,
+                'reviews_count': imp.reviews_count,
+                'in_stock': imp.in_stock,
+                'reviews_positive': imp.reviews_positive_count,
+                'reviews_negative': imp.reviews_negative_count,
+                'reviews_neutral': imp.reviews_neutral_count,
+                'review_insights': imp.review_insights,
+                'reviews_data': imp.reviews_data[:50] if imp.reviews_data else [],
+                'monitoring_period': imp.monitoring_period.isoformat() if imp.monitoring_period else None,
+                'is_recurring': imp.is_recurring,
+                'group': {
+                    'id': str(imp.group.id),
+                    'name': imp.group.name,
+                } if imp.group else None,
+                'created_at': imp.created_at.isoformat(),
+                'processed_at': imp.processed_at.isoformat() if imp.processed_at else None,
+                'error_message': imp.error_message,
+            }
+        }
+
+        return json_response(data)
+
+    except Exception as e:
+        return api_error(f'Error fetching import: {str(e)}', 500)
+
+
+# ============= Monitoring Groups API =============
+
+@require_GET
+def monitoring_groups_list(request):
+    """List monitoring groups."""
+    try:
+        from apps.scraping.models import MonitoringGroup
+
+        groups = MonitoringGroup.objects.all()
+
+        data = {
+            'success': True,
+            'groups': [
+                {
+                    'id': str(g.id),
+                    'name': g.name,
+                    'description': g.description,
+                    'group_type': g.group_type,
+                    'color': g.color,
+                    'imports_count': g.imports.count(),
+                }
+                for g in groups
+            ]
+        }
+
+        return json_response(data)
+
+    except Exception as e:
+        return api_error(f'Error fetching groups: {str(e)}', 500)
+
+
+@csrf_exempt
+@require_http_methods(['POST', 'PUT'])
+def monitoring_group_create(request):
+    """Create or update a monitoring group."""
+    try:
+        from apps.scraping.models import MonitoringGroup
+        from django.contrib.auth import get_user_model
+
+        try:
+            body = json.loads(request.body) if request.body else {}
+        except json.JSONDecodeError:
+            return api_error('Invalid JSON body')
+
+        name = body.get('name')
+        if not name:
+            return api_error('Name is required')
+
+        User = get_user_model()
+        user = request.user if request.user.is_authenticated else User.objects.first()
+
+        if not user:
+            return api_error('No user available', 500)
+
+        group_id = body.get('id')
+
+        if group_id:
+            try:
+                group = MonitoringGroup.objects.get(pk=group_id)
+                group.name = name
+                group.description = body.get('description', group.description)
+                group.group_type = body.get('group_type', group.group_type)
+                group.color = body.get('color', group.color)
+                group.save()
+            except MonitoringGroup.DoesNotExist:
+                return api_error('Group not found', 404)
+        else:
+            group = MonitoringGroup.objects.create(
+                user=user,
+                name=name,
+                description=body.get('description', ''),
+                group_type=body.get('group_type', 'own'),
+                color=body.get('color', '#3B82F6'),
+            )
+
+        return json_response({
+            'success': True,
+            'group': {
+                'id': str(group.id),
+                'name': group.name,
+                'description': group.description,
+                'group_type': group.group_type,
+                'color': group.color,
+            }
+        })
+
+    except Exception as e:
+        return api_error(f'Error saving group: {str(e)}', 500)
+
+
+# ============= Excel Export API =============
+
+@require_GET
+def export_monitoring_excel(request):
+    """
+    Export monitoring data to Excel.
+
+    Query params:
+        - period: Filter by period (YYYY-MM)
+
+    Returns Excel file download.
+    """
+    try:
+        from django.http import HttpResponse
+        from apps.scraping.exports import export_imports_to_excel
+        from django.contrib.auth import get_user_model
+
+        User = get_user_model()
+        user = request.user if request.user.is_authenticated else User.objects.first()
+
+        if not user:
+            return api_error('No user available', 500)
+
+        # Parse period
+        period = None
+        if request.GET.get('period'):
+            try:
+                from datetime import datetime
+                period = datetime.strptime(request.GET.get('period'), '%Y-%m').date()
+            except ValueError:
+                pass
+
+        # Generate Excel
+        buffer = export_imports_to_excel(user, period)
+
+        # Create response
+        filename = f'monitoring_{period.strftime("%Y-%m") if period else "all"}.xlsx'
+        response = HttpResponse(
+            buffer.getvalue(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+
+        return response
+
+    except Exception as e:
+        return api_error(f'Error exporting Excel: {str(e)}', 500)
+
+
+@require_GET
+def export_import_excel(request, import_id):
+    """
+    Export single import to Excel.
+
+    Returns Excel file download.
+    """
+    try:
+        from django.http import HttpResponse
+        from apps.scraping.models import ManualImport
+        from apps.scraping.exports import export_single_import_to_excel
+
+        try:
+            imp = ManualImport.objects.get(pk=import_id)
+        except ManualImport.DoesNotExist:
+            return api_error('Import not found', 404)
+
+        # Generate Excel
+        buffer = export_single_import_to_excel(imp)
+
+        # Create response
+        name = (imp.custom_name or imp.product_title or 'product')[:30]
+        filename = f'{name}_{imp.created_at.strftime("%Y%m%d")}.xlsx'
+        response = HttpResponse(
+            buffer.getvalue(),
+            content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        )
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+
+        return response
+
+    except Exception as e:
+        return api_error(f'Error exporting Excel: {str(e)}', 500)
+
+
+# ============= Available Periods API =============
+
+@require_GET
+def available_periods(request):
+    """Get list of available monitoring periods."""
+    try:
+        from apps.scraping.models import ManualImport
+
+        periods = ManualImport.objects.filter(
+            status=ManualImport.StatusChoices.COMPLETED,
+            monitoring_period__isnull=False,
+        ).values('monitoring_period').annotate(
+            count=Count('id')
+        ).order_by('-monitoring_period')
+
+        data = {
+            'success': True,
+            'periods': [
+                {
+                    'period': p['monitoring_period'].isoformat(),
+                    'label': p['monitoring_period'].strftime('%B %Y'),
+                    'count': p['count'],
+                }
+                for p in periods
+            ]
+        }
+
+        return json_response(data)
+
+    except Exception as e:
+        return api_error(f'Error fetching periods: {str(e)}', 500)

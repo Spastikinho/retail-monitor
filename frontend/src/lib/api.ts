@@ -144,6 +144,62 @@ export interface AuthResponse {
   error?: string;
 }
 
+export interface ManualImport {
+  id: string;
+  url: string;
+  retailer: string | null;
+  product_type: 'own' | 'competitor';
+  product_title: string;
+  custom_name: string;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  price_final: number | null;
+  price_change: number | null;
+  price_change_pct: number | null;
+  rating: number | null;
+  reviews_count: number | null;
+  in_stock: boolean | null;
+  reviews_positive: number;
+  reviews_negative: number;
+  monitoring_period: string | null;
+  created_at: string;
+  processed_at: string | null;
+  error_message: string | null;
+}
+
+export interface ManualImportDetail extends ManualImport {
+  notes: string;
+  price_regular: number | null;
+  price_promo: number | null;
+  price_previous: number | null;
+  reviews_neutral: number;
+  review_insights: Record<string, unknown>;
+  reviews_data: Array<{
+    rating: number;
+    text: string;
+    author: string;
+    date: string;
+    pros?: string;
+    cons?: string;
+  }>;
+  is_recurring: boolean;
+  group: { id: string; name: string } | null;
+}
+
+export interface MonitoringGroup {
+  id: string;
+  name: string;
+  description: string;
+  group_type: 'own' | 'competitor';
+  color: string;
+  imports_count: number;
+}
+
+export interface MonitoringPeriod {
+  period: string;
+  label: string;
+  count: number;
+}
+
 // API Methods
 export const api = {
   // Health
@@ -217,6 +273,42 @@ export const api = {
       '/export/products/',
       { params }
     ),
+
+  // Manual Import
+  getImports: (params?: { status?: string; product_type?: string; period?: string; limit?: number; offset?: number }) =>
+    request<{ success: boolean; total: number; imports: ManualImport[] }>('/imports/', { params }),
+
+  getImport: (id: string) =>
+    request<{ success: boolean; import: ManualImportDetail }>(`/imports/${id}/`),
+
+  createImports: (data: { urls: string[]; product_type?: string; group_id?: string }) =>
+    request<{ success: boolean; message: string; imports: Array<{ id: string; url: string; retailer: string | null; status: string }>; errors: string[] }>(
+      '/imports/create/',
+      { method: 'POST', body: JSON.stringify(data) }
+    ),
+
+  // Monitoring Groups
+  getGroups: () =>
+    request<{ success: boolean; groups: MonitoringGroup[] }>('/groups/'),
+
+  createGroup: (data: { name: string; description?: string; group_type?: string; color?: string; id?: string }) =>
+    request<{ success: boolean; group: MonitoringGroup }>(
+      '/groups/create/',
+      { method: 'POST', body: JSON.stringify(data) }
+    ),
+
+  // Periods
+  getPeriods: () =>
+    request<{ success: boolean; periods: MonitoringPeriod[] }>('/periods/'),
+
+  // Excel Export URLs (for direct download)
+  getExportMonitoringUrl: (period?: string) => {
+    const base = `${API_URL}/api/v1/export/monitoring/`;
+    return period ? `${base}?period=${period}` : base;
+  },
+
+  getExportImportUrl: (importId: string) =>
+    `${API_URL}/api/v1/export/import/${importId}/`,
 };
 
 export { ApiError };

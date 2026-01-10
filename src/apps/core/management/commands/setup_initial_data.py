@@ -21,6 +21,15 @@ class Command(BaseCommand):
                 'rate_limit_rpm': 10,
             },
             {
+                'name': 'Wildberries',
+                'slug': 'wildberries',
+                'base_url': 'https://www.wildberries.ru',
+                'connector_class': 'apps.scraping.connectors.wildberries.WildberriesConnector',
+                'product_url_pattern': r'wildberries\.ru/catalog/(\d+)/detail',
+                'requires_auth': False,
+                'rate_limit_rpm': 10,
+            },
+            {
                 'name': 'ВкусВилл',
                 'slug': 'vkusvill',
                 'base_url': 'https://vkusvill.ru',

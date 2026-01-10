@@ -42,4 +42,18 @@ urlpatterns = [
 
     # Export
     path('export/products/', views.export_products, name='export_products'),
+    path('export/monitoring/', views.export_monitoring_excel, name='export_monitoring_excel'),
+    path('export/import/<uuid:import_id>/', views.export_import_excel, name='export_import_excel'),
+
+    # Manual Import
+    path('imports/', views.import_list, name='import_list'),
+    path('imports/create/', views.import_urls, name='import_urls'),
+    path('imports/<uuid:import_id>/', views.import_detail, name='import_detail'),
+
+    # Monitoring Groups
+    path('groups/', views.monitoring_groups_list, name='monitoring_groups_list'),
+    path('groups/create/', views.monitoring_group_create, name='monitoring_group_create'),
+
+    # Periods
+    path('periods/', views.available_periods, name='available_periods'),
 ]

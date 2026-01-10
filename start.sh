@@ -3,9 +3,9 @@ cd src
 python manage.py migrate --noinput
 python manage.py collectstatic --noinput
 
-# Create admin user if credentials are set and user doesn't exist
+# Create or update admin user if credentials are set
 if [ -n "$ADMIN_USERNAME" ] && [ -n "$ADMIN_PASSWORD" ]; then
-    echo "Checking admin user..."
+    echo "Setting up admin user..."
     python -c "
 import os
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
@@ -16,11 +16,16 @@ User = get_user_model()
 username = os.environ.get('ADMIN_USERNAME')
 password = os.environ.get('ADMIN_PASSWORD')
 email = os.environ.get('ADMIN_EMAIL', '')
-if not User.objects.filter(username=username).exists():
-    User.objects.create_superuser(username=username, email=email, password=password)
+user, created = User.objects.get_or_create(username=username, defaults={'email': email, 'is_staff': True, 'is_superuser': True})
+user.set_password(password)
+user.is_staff = True
+user.is_superuser = True
+user.is_active = True
+user.save()
+if created:
     print(f'Created admin user: {username}')
 else:
-    print(f'Admin user {username} already exists')
+    print(f'Updated password for admin user: {username}')
 "
 fi
 

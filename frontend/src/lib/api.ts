@@ -17,7 +17,7 @@ class ApiError extends Error {
 async function request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
   const { params, ...fetchOptions } = options;
 
-  let url = `${API_URL}/api${endpoint}`;
+  let url = `${API_URL}/api/v1${endpoint}`;
 
   if (params) {
     const searchParams = new URLSearchParams();

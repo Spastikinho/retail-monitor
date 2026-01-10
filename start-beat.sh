@@ -45,6 +45,10 @@ except Exception as e:
     print('Run migrations on the web service first')
 "
 
+# Run migrations to ensure django_celery_beat tables exist
+echo "Running migrations..."
+python manage.py migrate --noinput
+
 echo "Starting Celery Beat scheduler..."
 # Start celery beat
 exec celery -A config beat --loglevel=info --scheduler django_celery_beat.schedulers:DatabaseScheduler

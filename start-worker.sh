@@ -1,9 +1,14 @@
 #!/bin/bash
 cd src
 
+# Set Django settings module
+export DJANGO_SETTINGS_MODULE=config.settings
+
 # Wait for database to be ready
 echo "Waiting for database..."
 python -c "
+import os
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 import django
 django.setup()
 from django.db import connection

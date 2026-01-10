@@ -306,11 +306,18 @@ def run_sync(coro):
     """
     Run an async coroutine synchronously.
     Useful for calling from Celery tasks.
+    Uses a new event loop in a separate thread to avoid Django async context issues.
     """
-    try:
-        loop = asyncio.get_event_loop()
-    except RuntimeError:
+    import concurrent.futures
+
+    def run_in_thread():
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
+        try:
+            return loop.run_until_complete(coro)
+        finally:
+            loop.close()
 
-    return loop.run_until_complete(coro)
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        future = executor.submit(run_in_thread)
+        return future.result()

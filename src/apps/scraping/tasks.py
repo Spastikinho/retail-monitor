@@ -5,6 +5,7 @@ import importlib
 import logging
 from datetime import date
 from celery import shared_task
+from asgiref.sync import sync_to_async
 
 from django.utils import timezone
 
@@ -674,148 +675,132 @@ def run_all_cleanups():
 
 # ============= Manual Import Tasks =============
 
-async def process_manual_import_async(import_id: str, scrape_reviews: bool = True):
+async def _scrape_product_async(connector, url, scrape_reviews: bool = True):
     """
-    Async function to process a manual import.
-
-    Args:
-        import_id: UUID of the ManualImport
-        scrape_reviews: Whether to also scrape reviews
-
-    Returns:
-        dict with results
+    Async helper to run browser scraping only.
+    Returns tuple of (result, reviews_list).
     """
-    from apps.scraping.models import ManualImport
-    from apps.scraping.connectors import get_connector
+    async with BrowserManager() as browser:
+        result = await connector.scrape_product(url, browser)
 
-    try:
-        import_obj = ManualImport.objects.get(pk=import_id)
-    except ManualImport.DoesNotExist:
-        return {'success': False, 'error': 'Import not found'}
+        reviews_list = []
+        if result.success and result.price_data and scrape_reviews:
+            try:
+                reviews_data = await connector.scrape_reviews(
+                    url,
+                    browser,
+                    max_reviews=30,
+                )
+                for review in reviews_data:
+                    reviews_list.append({
+                        'rating': review.rating,
+                        'text': review.text[:500] if review.text else '',
+                        'author': review.author_name,
+                        'pros': review.pros[:300] if review.pros else '',
+                        'cons': review.cons[:300] if review.cons else '',
+                        'date': review.published_at.isoformat() if review.published_at else None,
+                    })
+            except Exception as e:
+                logger.warning(f'Error scraping reviews: {e}')
 
-    # Update status
-    import_obj.status = ManualImport.StatusChoices.PROCESSING
-    import_obj.save(update_fields=['status', 'updated_at'])
-
-    # Detect retailer
-    retailer = import_obj.detect_retailer()
-    if not retailer:
-        import_obj.status = ManualImport.StatusChoices.FAILED
-        import_obj.error_message = 'Не удалось определить магазин из URL'
-        import_obj.processed_at = timezone.now()
-        import_obj.save()
-        return {'success': False, 'error': 'Unknown retailer'}
-
-    import_obj.retailer = retailer
-    import_obj.save(update_fields=['retailer'])
-
-    # Get connector class
-    connector_cls = get_connector(retailer.slug)
-    if not connector_cls:
-        import_obj.status = ManualImport.StatusChoices.FAILED
-        import_obj.error_message = f'Коннектор для {retailer.name} не найден'
-        import_obj.processed_at = timezone.now()
-        import_obj.save()
-        return {'success': False, 'error': 'Connector not found'}
-
-    connector = connector_cls()
-
-    try:
-        async with BrowserManager() as browser:
-            # Scrape product data
-            result = await connector.scrape_product(import_obj.url, browser)
-
-            if result.success and result.price_data:
-                import_obj.product_title = result.price_data.title or ''
-                import_obj.price_regular = result.price_data.price_regular
-                import_obj.price_promo = result.price_data.price_promo
-                import_obj.price_final = result.price_data.price_final
-                import_obj.rating = result.price_data.rating_avg
-                import_obj.reviews_count = result.price_data.reviews_count
-                import_obj.in_stock = result.price_data.in_stock
-                import_obj.raw_data = result.raw_data or {}
-
-                # Scrape reviews if requested
-                reviews_list = []
-                if scrape_reviews:
-                    try:
-                        reviews_data = await connector.scrape_reviews(
-                            import_obj.url,
-                            browser,
-                            max_reviews=30,
-                        )
-                        for review in reviews_data:
-                            reviews_list.append({
-                                'rating': review.rating,
-                                'text': review.text[:500] if review.text else '',
-                                'author': review.author_name,
-                                'pros': review.pros[:300] if review.pros else '',
-                                'cons': review.cons[:300] if review.cons else '',
-                                'date': review.published_at.isoformat() if review.published_at else None,
-                            })
-                    except Exception as e:
-                        logger.warning(f'Error scraping reviews for manual import: {e}')
-
-                import_obj.reviews_data = reviews_list
-
-                # Analyze reviews for insights
-                if reviews_list:
-                    import_obj.analyze_reviews()
-
-                # Calculate price change from previous period
-                import_obj.calculate_price_change()
-
-                import_obj.status = ManualImport.StatusChoices.COMPLETED
-                import_obj.processed_at = timezone.now()
-                import_obj.save()
-
-                return {
-                    'success': True,
-                    'title': import_obj.product_title,
-                    'price': float(import_obj.price_final) if import_obj.price_final else None,
-                    'reviews_count': len(reviews_list),
-                    'insights': import_obj.review_insights,
-                }
-            else:
-                import_obj.status = ManualImport.StatusChoices.FAILED
-                import_obj.error_message = result.error_message or 'Не удалось получить данные'
-                import_obj.raw_data = result.raw_data or {}
-                import_obj.processed_at = timezone.now()
-                import_obj.save()
-
-                return {'success': False, 'error': result.error_message}
-
-    except Exception as e:
-        logger.exception(f'Error processing manual import {import_id}: {e}')
-        import_obj.status = ManualImport.StatusChoices.FAILED
-        import_obj.error_message = str(e)[:500]
-        import_obj.processed_at = timezone.now()
-        import_obj.save()
-
-        return {'success': False, 'error': str(e)}
+        return result, reviews_list
 
 
 @shared_task(bind=True, max_retries=2, default_retry_delay=60)
 def process_manual_import(self, import_id: str, scrape_reviews: bool = True):
     """
-    Process a manual URL import.
+    Process a manual URL import (synchronous task with async browser scraping).
 
     Args:
         import_id: UUID of the ManualImport
         scrape_reviews: Whether to also scrape reviews
     """
+    from apps.scraping.models import ManualImport
+    from apps.scraping.connectors import get_connector
+
     logger.info(f'Processing manual import: {import_id}')
 
     try:
-        result = run_sync(process_manual_import_async(import_id, scrape_reviews))
-        logger.info(f'Manual import {import_id} result: {result}')
-        return result
+        # Get import object (sync ORM call)
+        try:
+            import_obj = ManualImport.objects.get(pk=import_id)
+        except ManualImport.DoesNotExist:
+            return {'success': False, 'error': 'Import not found'}
+
+        # Update status
+        import_obj.status = ManualImport.StatusChoices.PROCESSING
+        import_obj.save(update_fields=['status', 'updated_at'])
+
+        # Detect retailer
+        retailer = import_obj.detect_retailer()
+        if not retailer:
+            import_obj.status = ManualImport.StatusChoices.FAILED
+            import_obj.error_message = 'Не удалось определить магазин из URL'
+            import_obj.processed_at = timezone.now()
+            import_obj.save()
+            return {'success': False, 'error': 'Unknown retailer'}
+
+        import_obj.retailer = retailer
+        import_obj.save(update_fields=['retailer'])
+
+        # Get connector class
+        connector_cls = get_connector(retailer.slug)
+        if not connector_cls:
+            import_obj.status = ManualImport.StatusChoices.FAILED
+            import_obj.error_message = f'Коннектор для {retailer.name} не найден'
+            import_obj.processed_at = timezone.now()
+            import_obj.save()
+            return {'success': False, 'error': 'Connector not found'}
+
+        connector = connector_cls()
+
+        # Run async browser scraping in separate thread
+        result, reviews_list = run_sync(_scrape_product_async(connector, import_obj.url, scrape_reviews))
+
+        # Process results (sync ORM calls)
+        if result.success and result.price_data:
+            import_obj.product_title = result.price_data.title or ''
+            import_obj.price_regular = result.price_data.price_regular
+            import_obj.price_promo = result.price_data.price_promo
+            import_obj.price_final = result.price_data.price_final
+            import_obj.rating = result.price_data.rating_avg
+            import_obj.reviews_count = result.price_data.reviews_count
+            import_obj.in_stock = result.price_data.in_stock
+            import_obj.raw_data = result.raw_data or {}
+            import_obj.reviews_data = reviews_list
+
+            # Analyze reviews for insights
+            if reviews_list:
+                import_obj.analyze_reviews()
+
+            # Calculate price change from previous period
+            import_obj.calculate_price_change()
+
+            import_obj.status = ManualImport.StatusChoices.COMPLETED
+            import_obj.processed_at = timezone.now()
+            import_obj.save()
+
+            logger.info(f'Manual import {import_id} completed: {import_obj.product_title}')
+            return {
+                'success': True,
+                'title': import_obj.product_title,
+                'price': float(import_obj.price_final) if import_obj.price_final else None,
+                'reviews_count': len(reviews_list),
+                'insights': import_obj.review_insights,
+            }
+        else:
+            import_obj.status = ManualImport.StatusChoices.FAILED
+            import_obj.error_message = result.error_message or 'Не удалось получить данные'
+            import_obj.raw_data = result.raw_data or {}
+            import_obj.processed_at = timezone.now()
+            import_obj.save()
+
+            return {'success': False, 'error': result.error_message}
 
     except Exception as e:
         logger.exception(f'Error processing manual import {import_id}: {e}')
 
         # Update status on failure
-        from apps.scraping.models import ManualImport
         try:
             import_obj = ManualImport.objects.get(pk=import_id)
             import_obj.status = ManualImport.StatusChoices.FAILED

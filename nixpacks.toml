@@ -1,0 +1,17 @@
+[phases.setup]
+nixPkgs = [
+    "python311",
+    "postgresql",
+    "chromium",
+    "playwright-driver"
+]
+
+[phases.install]
+cmds = [
+    "pip install -r requirements.txt",
+    "playwright install chromium"
+]
+
+[variables]
+PLAYWRIGHT_BROWSERS_PATH = "/app/.playwright"
+PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "0"

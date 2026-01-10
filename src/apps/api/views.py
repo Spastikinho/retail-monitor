@@ -7,7 +7,6 @@ from datetime import timedelta
 from decimal import Decimal
 
 from django.contrib.auth import authenticate, login, logout
-from django.contrib.auth.decorators import login_required
 from django.db.models import Avg, Count, Q
 from django.http import JsonResponse
 from django.middleware.csrf import get_token
@@ -141,7 +140,6 @@ def check_auth(request):
 # ============= Products API =============
 
 @require_GET
-@login_required
 def products_list(request):
     """
     List all products with optional filtering.
@@ -202,7 +200,6 @@ def products_list(request):
 
 
 @require_GET
-@login_required
 def product_detail(request, product_id):
     """
     Get detailed product info including listings and latest prices.
@@ -261,7 +258,6 @@ def product_detail(request, product_id):
 # ============= Retailers API =============
 
 @require_GET
-@login_required
 def retailers_list(request):
     """List all active retailers."""
     from apps.retailers.models import Retailer
@@ -287,7 +283,6 @@ def retailers_list(request):
 # ============= Price History API =============
 
 @require_GET
-@login_required
 def price_history(request, listing_id):
     """
     Get price history for a listing.
@@ -336,7 +331,6 @@ def price_history(request, listing_id):
 # ============= Reviews API =============
 
 @require_GET
-@login_required
 def reviews_list(request, listing_id):
     """
     Get reviews for a listing.
@@ -389,7 +383,6 @@ def reviews_list(request, listing_id):
 # ============= Alerts API =============
 
 @require_GET
-@login_required
 def alerts_list(request):
     """
     Get recent alert events.
@@ -440,7 +433,6 @@ def alerts_list(request):
 # ============= Analytics API =============
 
 @require_GET
-@login_required
 def analytics_summary(request):
     """
     Get analytics summary for dashboard.
@@ -495,7 +487,6 @@ def analytics_summary(request):
 # ============= Scraping Control API =============
 
 @require_POST
-@login_required
 def trigger_scrape(request):
     """
     Trigger a scraping session.
@@ -557,7 +548,6 @@ def trigger_scrape(request):
 
 
 @require_GET
-@login_required
 def scrape_status(request, session_id):
     """
     Get scrape session status.
@@ -591,7 +581,6 @@ def scrape_status(request, session_id):
 # ============= Export API =============
 
 @require_GET
-@login_required
 def export_products(request):
     """
     Export products with latest prices to JSON.

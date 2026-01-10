@@ -8,8 +8,9 @@ from . import views
 app_name = 'api'
 
 urlpatterns = [
-    # Health Check
+    # Health Check & Setup
     path('health/', views.health_check, name='health_check'),
+    path('setup/retailers/', views.setup_retailers, name='setup_retailers'),
 
     # Authentication
     path('auth/csrf/', views.get_csrf_token, name='get_csrf_token'),

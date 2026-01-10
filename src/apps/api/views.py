@@ -62,6 +62,83 @@ def health_check(request):
     return JsonResponse(health)
 
 
+@csrf_exempt
+@require_POST
+def setup_retailers(request):
+    """
+    Initialize retailers in the database.
+    Call this once to set up the system.
+    """
+    from apps.retailers.models import Retailer
+
+    retailers_data = [
+        {
+            'name': 'Ozon',
+            'slug': 'ozon',
+            'base_url': 'https://www.ozon.ru',
+            'connector_class': 'apps.scraping.connectors.ozon.OzonConnector',
+            'product_url_pattern': r'ozon\.ru/product/[^/]+-(\d+)',
+            'requires_auth': False,
+            'rate_limit_rpm': 10,
+        },
+        {
+            'name': 'Wildberries',
+            'slug': 'wildberries',
+            'base_url': 'https://www.wildberries.ru',
+            'connector_class': 'apps.scraping.connectors.wildberries.WildberriesConnector',
+            'product_url_pattern': r'wildberries\.ru/catalog/(\d+)/detail',
+            'requires_auth': False,
+            'rate_limit_rpm': 10,
+        },
+        {
+            'name': 'ВкусВилл',
+            'slug': 'vkusvill',
+            'base_url': 'https://vkusvill.ru',
+            'connector_class': 'apps.scraping.connectors.vkusvill.VkusvillConnector',
+            'product_url_pattern': r'vkusvill\.ru/goods/[^/]+-(\d+)\.html',
+            'requires_auth': False,
+            'rate_limit_rpm': 10,
+        },
+        {
+            'name': 'Перекрёсток',
+            'slug': 'perekrestok',
+            'base_url': 'https://www.perekrestok.ru',
+            'connector_class': 'apps.scraping.connectors.perekrestok.PerekrestokConnector',
+            'product_url_pattern': r'perekrestok\.ru/cat/\d+/p/[^/]+-(\d+)',
+            'requires_auth': False,
+            'rate_limit_rpm': 10,
+        },
+        {
+            'name': 'Яндекс Лавка',
+            'slug': 'lavka',
+            'base_url': 'https://lavka.yandex.ru',
+            'connector_class': 'apps.scraping.connectors.lavka.LavkaConnector',
+            'product_url_pattern': r'lavka\.yandex\.ru/product/([a-zA-Z0-9_-]+)',
+            'requires_auth': False,
+            'rate_limit_rpm': 5,
+        },
+    ]
+
+    created = []
+    updated = []
+    for data in retailers_data:
+        retailer, was_created = Retailer.objects.update_or_create(
+            slug=data['slug'],
+            defaults=data,
+        )
+        if was_created:
+            created.append(retailer.name)
+        else:
+            updated.append(retailer.name)
+
+    return json_response({
+        'success': True,
+        'message': f'Created {len(created)}, updated {len(updated)} retailers',
+        'created': created,
+        'updated': updated,
+    })
+
+
 # ============= Authentication API =============
 
 @ensure_csrf_cookie

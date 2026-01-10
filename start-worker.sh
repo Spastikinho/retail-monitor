@@ -36,5 +36,7 @@ else:
 "
 
 echo "Starting Celery Worker..."
+# Allow running as root in container (suppress warning)
+export C_FORCE_ROOT=true
 # Start celery worker - listen to all queues (celery, scraping, analytics, alerts)
 exec celery -A config worker --loglevel=info --concurrency=2 -Q celery,scraping,analytics,alerts

@@ -744,8 +744,12 @@ def import_urls(request):
                     'status': import_obj.status,
                 })
 
-                # Queue for processing
-                process_manual_import.delay(str(import_obj.pk))
+                # Queue for processing (optional - may fail if Redis not available)
+                try:
+                    process_manual_import.delay(str(import_obj.pk))
+                except Exception as task_err:
+                    # Celery/Redis not available - import saved but not processed
+                    errors.append(f'Import saved but processing queued failed: {str(task_err)[:50]}')
 
             except Exception as e:
                 errors.append(f'Error creating import for {url[:30]}: {str(e)}')

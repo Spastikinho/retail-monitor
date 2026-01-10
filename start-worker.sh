@@ -35,7 +35,7 @@ else:
     sys.exit(1)
 "
 
-echo "Starting Celery Worker..."
+echo "Starting Celery Worker (v2)..."
 # Allow running as root in container (suppress warning)
 export C_FORCE_ROOT=true
 # Start celery worker - listen to all queues (celery, scraping, analytics, alerts)

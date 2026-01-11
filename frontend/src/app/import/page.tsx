@@ -21,10 +21,20 @@ import { SkeletonTable, Skeleton } from '@/components/Skeleton';
 import { api, ManualImport } from '@/lib/api';
 import {
   validateUrls,
+  validateUrl,
   ValidationError,
   ValidationResult,
   getSupportedRetailerNames,
+  SUPPORTED_RETAILERS,
+  RetailerConfig,
 } from '@/lib/url-validation';
+
+// Interface for URL entries with optional retailer override
+interface UrlEntry {
+  url: string;
+  retailerOverride: string | null;
+  validation: ValidationResult;
+}
 
 export default function ImportPage() {
   const router = useRouter();
@@ -35,14 +45,89 @@ export default function ImportPage() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  // Retailer overrides: map of line index to retailer code
+  const [retailerOverrides, setRetailerOverrides] = useState<Record<number, string>>({});
 
-  // Real-time URL validation
+  // Parse URLs with validation and check for overrides
+  const urlEntries = useMemo((): UrlEntry[] => {
+    if (!urls.trim()) return [];
+
+    return urls
+      .split('\n')
+      .map((line, index) => line.trim())
+      .filter(url => url.length > 0)
+      .map((url, index) => {
+        const override = retailerOverrides[index];
+        const validation = validateUrl(url);
+
+        // If there's a retailer override, mark as valid for that retailer
+        if (override && !validation.isValid) {
+          const retailer = SUPPORTED_RETAILERS.find(r => r.code === override);
+          if (retailer) {
+            return {
+              url,
+              retailerOverride: override,
+              validation: {
+                url,
+                isValid: true,
+                retailer,
+                error: undefined,
+                suggestion: undefined,
+              },
+            };
+          }
+        }
+
+        return {
+          url,
+          retailerOverride: override || null,
+          validation,
+        };
+      });
+  }, [urls, retailerOverrides]);
+
+  // Compute validation stats from entries
   const validation = useMemo(() => {
-    if (!urls.trim()) {
-      return { valid: [], invalid: [], total: 0, validCount: 0, invalidCount: 0 };
+    const valid = urlEntries.filter(e => e.validation.isValid).map(e => e.validation);
+    const invalid = urlEntries
+      .filter(e => !e.validation.isValid)
+      .map((e, i) => ({
+        line: i + 1,
+        url: e.url,
+        error: e.validation.error || 'Unknown error',
+        suggestion: e.validation.suggestion,
+      }));
+
+    return {
+      valid,
+      invalid,
+      total: urlEntries.length,
+      validCount: valid.length,
+      invalidCount: invalid.length,
+    };
+  }, [urlEntries]);
+
+  // Handle retailer override change
+  const handleRetailerOverride = (index: number, retailerCode: string | null) => {
+    setRetailerOverrides(prev => {
+      if (retailerCode === null) {
+        const { [index]: _, ...rest } = prev;
+        return rest;
+      }
+      return { ...prev, [index]: retailerCode };
+    });
+  };
+
+  // Clear overrides when URLs change
+  const handleUrlsChange = (newUrls: string) => {
+    setUrls(newUrls);
+    // Reset overrides if URL count changes significantly
+    const oldCount = urls.split('\n').filter(l => l.trim()).length;
+    const newCount = newUrls.split('\n').filter(l => l.trim()).length;
+    if (Math.abs(oldCount - newCount) > 1) {
+      setRetailerOverrides({});
     }
-    return validateUrls(urls);
-  }, [urls]);
+  };
 
   const fetchImports = async () => {
     setIsLoading(true);
@@ -87,23 +172,44 @@ export default function ImportPage() {
     setIsSubmitting(true);
     try {
       const validUrls = validation.valid.map(v => v.url);
-      const res = await api.createImports({
-        urls: validUrls,
-        product_type: productType,
-      });
 
-      if (res.errors && res.errors.length > 0) {
-        setError(`Warnings: ${res.errors.join(', ')}`);
-      }
+      // For multiple URLs, use Runs API and navigate to run details
+      if (validUrls.length > 1) {
+        const res = await api.createRun({
+          urls: validUrls,
+          product_type: productType,
+        });
 
-      setSuccess(`Created ${res.imports.length} import(s). Processing...`);
-      setUrls('');
+        if (res.errors && res.errors.length > 0) {
+          setError(`Warnings: ${res.errors.join(', ')}`);
+        }
 
-      // Navigate to first import if single URL
-      if (res.imports.length === 1) {
-        router.push(`/import/${res.imports[0].id}`);
+        setSuccess(`Created batch run with ${res.items_count} item(s). Redirecting...`);
+        setUrls('');
+        setRetailerOverrides({});
+
+        // Navigate to run details page
+        router.push(`/runs/${res.run_id}`);
       } else {
-        fetchImports();
+        // For single URL, use imports API and navigate to import detail
+        const res = await api.createImports({
+          urls: validUrls,
+          product_type: productType,
+        });
+
+        if (res.errors && res.errors.length > 0) {
+          setError(`Warnings: ${res.errors.join(', ')}`);
+        }
+
+        setSuccess(`Created import. Processing...`);
+        setUrls('');
+        setRetailerOverrides({});
+
+        if (res.imports.length === 1) {
+          router.push(`/import/${res.imports[0].id}`);
+        } else {
+          fetchImports();
+        }
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create imports');
@@ -196,7 +302,7 @@ export default function ImportPage() {
                 </div>
                 <textarea
                   value={urls}
-                  onChange={(e) => setUrls(e.target.value)}
+                  onChange={(e) => handleUrlsChange(e.target.value)}
                   className={`w-full h-40 px-4 py-3 border rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-primary-500 ${
                     validation.invalidCount > 0 ? 'border-yellow-400' : 'border-gray-300'
                   }`}
@@ -206,43 +312,65 @@ export default function ImportPage() {
                   Supported: {getSupportedRetailerNames().join(', ')}
                 </p>
 
-                {/* Validation Errors */}
-                {validation.invalidCount > 0 && (
-                  <div className="mt-2 p-3 bg-yellow-50 rounded-lg border border-yellow-200">
-                    <div className="flex items-start">
-                      <AlertTriangle className="h-5 w-5 text-yellow-500 mr-2 flex-shrink-0 mt-0.5" />
-                      <div className="text-sm">
-                        <p className="font-medium text-yellow-800">Validation Issues:</p>
-                        <ul className="mt-1 text-yellow-700 space-y-1">
-                          {validation.invalid.slice(0, 5).map((err, i) => (
-                            <li key={i}>
-                              Line {err.line}: {err.error}
-                              {err.suggestion && (
-                                <span className="text-yellow-600"> - {err.suggestion}</span>
-                              )}
-                            </li>
-                          ))}
-                          {validation.invalid.length > 5 && (
-                            <li>...and {validation.invalid.length - 5} more</li>
+                {/* URL Preview with Retailer Override */}
+                {urlEntries.length > 0 && urlEntries.length <= 10 && (
+                  <div className="mt-3 space-y-2">
+                    <p className="text-sm font-medium text-gray-700">URLs Preview:</p>
+                    <div className="space-y-2 max-h-60 overflow-y-auto">
+                      {urlEntries.map((entry, index) => (
+                        <div
+                          key={index}
+                          className={`flex items-center gap-2 p-2 rounded-lg text-sm ${
+                            entry.validation.isValid
+                              ? 'bg-green-50 border border-green-200'
+                              : 'bg-yellow-50 border border-yellow-200'
+                          }`}
+                        >
+                          <span className="flex-shrink-0 w-6 text-gray-500">#{index + 1}</span>
+                          <span className="flex-1 truncate font-mono text-xs">
+                            {entry.url.length > 60 ? entry.url.slice(0, 60) + '...' : entry.url}
+                          </span>
+                          <select
+                            value={entry.retailerOverride || entry.validation.retailer?.code || ''}
+                            onChange={(e) => handleRetailerOverride(index, e.target.value || null)}
+                            className={`flex-shrink-0 px-2 py-1 text-xs rounded border ${
+                              entry.validation.isValid
+                                ? 'border-green-300 bg-green-100'
+                                : 'border-yellow-300 bg-yellow-100'
+                            }`}
+                          >
+                            <option value="">Select retailer</option>
+                            {SUPPORTED_RETAILERS.map((r) => (
+                              <option key={r.code} value={r.code}>
+                                {r.name}
+                              </option>
+                            ))}
+                          </select>
+                          {entry.validation.isValid ? (
+                            <CheckCircle className="h-4 w-4 text-green-500 flex-shrink-0" />
+                          ) : (
+                            <AlertTriangle className="h-4 w-4 text-yellow-500 flex-shrink-0" />
                           )}
-                        </ul>
-                      </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}
 
-                {/* Valid URLs Preview */}
-                {validation.validCount > 0 && validation.validCount <= 5 && (
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {validation.valid.map((v, i) => (
-                      <span
-                        key={i}
-                        className="inline-flex items-center px-2 py-1 bg-green-50 text-green-700 text-xs rounded-full"
-                      >
-                        <CheckCircle className="h-3 w-3 mr-1" />
-                        {v.retailer?.name || 'Unknown'}
-                      </span>
-                    ))}
+                {/* Validation Errors Summary */}
+                {validation.invalidCount > 0 && urlEntries.length > 10 && (
+                  <div className="mt-2 p-3 bg-yellow-50 rounded-lg border border-yellow-200">
+                    <div className="flex items-start">
+                      <AlertTriangle className="h-5 w-5 text-yellow-500 mr-2 flex-shrink-0 mt-0.5" />
+                      <div className="text-sm">
+                        <p className="font-medium text-yellow-800">
+                          {validation.invalidCount} URL(s) could not be validated
+                        </p>
+                        <p className="text-yellow-700 mt-1">
+                          For more than 10 URLs, use the bulk paste mode. Invalid URLs will be skipped.
+                        </p>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>

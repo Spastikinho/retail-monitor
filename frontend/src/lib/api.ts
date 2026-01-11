@@ -1,30 +1,48 @@
-// In production, use same-origin proxy (via Vercel rewrites) to avoid CORS
-// In development, fallback to direct API URL
-const API_BASE = typeof window !== 'undefined' && process.env.NODE_ENV === 'production'
-  ? '' // Same-origin: /api/v1/... proxied by Vercel
-  : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000');
+/**
+ * API Client for Retail Monitor
+ *
+ * Connectivity model:
+ * - Production: Vercel rewrites proxy /api/* to Railway backend (same-origin, no CORS)
+ * - Development: Direct calls to NEXT_PUBLIC_API_URL (default: http://localhost:8000)
+ *
+ * All API calls use relative paths (/api/v1/...) which work in both environments.
+ */
 
-// Direct API URL for export links that need full URLs
-const DIRECT_API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://web-production-9f63.up.railway.app';
+// For SSR/build time, we need the full URL. For client-side, relative paths work via proxy.
+const getApiBase = (): string => {
+  // Server-side rendering or build time - need full URL
+  if (typeof window === 'undefined') {
+    return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+  }
+  // Client-side in production - use relative paths (Vercel proxies to Railway)
+  if (process.env.NODE_ENV === 'production') {
+    return '';
+  }
+  // Client-side in development - use configured URL or localhost
+  return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+};
 
 interface RequestOptions extends RequestInit {
   params?: Record<string, string | number | boolean | undefined>;
 }
 
-class ApiError extends Error {
+export class ApiError extends Error {
   status: number;
+  details?: Record<string, unknown>;
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status: number, details?: Record<string, unknown>) {
     super(message);
     this.status = status;
+    this.details = details;
     this.name = 'ApiError';
   }
 }
 
 async function request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
   const { params, ...fetchOptions } = options;
+  const apiBase = getApiBase();
 
-  let url = `${API_BASE}/api/v1${endpoint}`;
+  let url = `${apiBase}/api/v1${endpoint}`;
 
   if (params) {
     const searchParams = new URLSearchParams();
@@ -45,17 +63,70 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
       'Content-Type': 'application/json',
       ...fetchOptions.headers,
     },
+    // Include credentials for session-based auth
+    credentials: 'include',
   });
 
   if (!response.ok) {
     const error = await response.json().catch(() => ({ error: 'Request failed' }));
-    throw new ApiError(error.error || 'Request failed', response.status);
+    throw new ApiError(
+      error.error || error.message || 'Request failed',
+      response.status,
+      error
+    );
   }
 
   return response.json();
 }
 
+/**
+ * Raw health check that returns the full response for status checking
+ */
+export async function checkBackendHealth(): Promise<{
+  ok: boolean;
+  status: number;
+  data?: { status: string; checks?: Record<string, string> };
+  error?: string;
+  latencyMs: number;
+}> {
+  const apiBase = getApiBase();
+  const start = Date.now();
+
+  try {
+    const response = await fetch(`${apiBase}/api/v1/health/`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+    });
+
+    const latencyMs = Date.now() - start;
+
+    if (response.ok) {
+      const data = await response.json();
+      return { ok: true, status: response.status, data, latencyMs };
+    } else {
+      return {
+        ok: false,
+        status: response.status,
+        error: `HTTP ${response.status}`,
+        latencyMs
+      };
+    }
+  } catch (error) {
+    const latencyMs = Date.now() - start;
+    return {
+      ok: false,
+      status: 0,
+      error: error instanceof Error ? error.message : 'Connection failed',
+      latencyMs,
+    };
+  }
+}
+
+// ============================================================================
 // Types
+// ============================================================================
+
 export interface Product {
   id: string;
   name: string;
@@ -134,8 +205,8 @@ export interface AnalyticsSummary {
 
 export interface HealthCheck {
   status: string;
-  database: string;
-  timestamp: string;
+  service?: string;
+  checks?: Record<string, string>;
 }
 
 export interface User {
@@ -207,7 +278,10 @@ export interface MonitoringPeriod {
   count: number;
 }
 
+// ============================================================================
 // API Methods
+// ============================================================================
+
 export const api = {
   // Health
   health: () => request<HealthCheck>('/health/'),
@@ -238,7 +312,7 @@ export const api = {
   // Price History
   getPriceHistory: (listingId: string, days?: number) =>
     request<{ success: boolean; listing_id: string; product: string; retailer: string; history: PriceHistory[] }>(
-      `/price-history/${listingId}/`,
+      `/listings/${listingId}/prices/`,
       { params: { days } }
     ),
 
@@ -308,15 +382,13 @@ export const api = {
   getPeriods: () =>
     request<{ success: boolean; periods: MonitoringPeriod[] }>('/periods/'),
 
-  // Excel Export URLs (for direct download - need full URLs for file downloads)
+  // Excel Export URLs - these need to go through the proxy too
+  // Returns relative URLs that work via Vercel proxy
   getExportMonitoringUrl: (period?: string) => {
-    const base = `${DIRECT_API_URL}/api/v1/export/monitoring/`;
+    const base = '/api/v1/export/monitoring/';
     return period ? `${base}?period=${period}` : base;
   },
 
   getExportImportUrl: (importId: string) =>
-    `${DIRECT_API_URL}/api/v1/export/import/${importId}/`,
+    `/api/v1/export/import/${importId}/`,
 };
-
-export { ApiError };
-// Deploy trigger 1768057286

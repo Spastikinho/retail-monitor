@@ -69,6 +69,9 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    # Security middleware (admin IP restriction, secure headers)
+    'apps.core.middleware.AdminIPRestrictionMiddleware',
+    'apps.core.middleware.SecureHeadersMiddleware',
 ]
 
 ROOT_URLCONF = 'config.urls'
@@ -211,6 +214,27 @@ DATA_DIR = BASE_DIR.parent / 'data'
 RAW_SNAPSHOTS_DIR = DATA_DIR / 'raw_snapshots'
 EXPORTS_DIR = DATA_DIR / 'exports'
 IMPORTS_DIR = DATA_DIR / 'imports'
+
+# Artifact Storage Configuration
+# Options: 'local', 's3', 'r2'
+ARTIFACT_STORAGE_BACKEND = env('ARTIFACT_STORAGE_BACKEND', default='local')
+ARTIFACT_STORAGE_PATH = env('ARTIFACT_STORAGE_PATH', default=str(DATA_DIR / 'artifacts'))
+
+# S3/R2 Configuration (for production)
+ARTIFACT_S3_ENDPOINT = env('ARTIFACT_S3_ENDPOINT', default='')  # e.g., https://xxx.r2.cloudflarestorage.com
+ARTIFACT_S3_BUCKET = env('ARTIFACT_S3_BUCKET', default='retail-monitor-artifacts')
+ARTIFACT_S3_ACCESS_KEY = env('ARTIFACT_S3_ACCESS_KEY', default='')
+ARTIFACT_S3_SECRET_KEY = env('ARTIFACT_S3_SECRET_KEY', default='')
+ARTIFACT_S3_REGION = env('ARTIFACT_S3_REGION', default='auto')
+ARTIFACT_PUBLIC_URL_BASE = env('ARTIFACT_PUBLIC_URL_BASE', default='')  # Optional public URL base
+
+# Bootstrap Admin Configuration
+ALLOW_BOOTSTRAP_ADMIN = env.bool('ALLOW_BOOTSTRAP_ADMIN', default=False)
+ADMIN_EMAIL = env('ADMIN_EMAIL', default='')
+ADMIN_PASSWORD = env('ADMIN_PASSWORD', default='')
+
+# Admin Security
+ADMIN_IP_ALLOWLIST = env.list('ADMIN_IP_ALLOWLIST', default=[])  # Empty = allow all
 
 # Logging - Use console only for cloud deployments (Railway, etc.)
 LOGGING = {

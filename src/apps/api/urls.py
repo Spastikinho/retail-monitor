@@ -58,8 +58,16 @@ urlpatterns = [
     # Periods
     path('periods/', views.available_periods, name='available_periods'),
 
-    # Runs API (batch import with status tracking)
-    path('runs/', views.list_runs, name='list_runs'),
-    path('runs/create/', views.create_run, name='create_run'),
-    path('runs/<uuid:run_id>/', views.get_run, name='get_run'),
+    # Runs API (Phase 3 Spec Compliance)
+    path('runs/', views.create_run, name='create_run'),
+    path('runs/<str:run_id>/', views.get_run, name='get_run'),
+    path('runs/<str:run_id>/retry/', views.retry_run, name='retry_run'),
+
+    # OpenAPI Schema
+    path('schema/', views.openapi_schema, name='openapi_schema'),
+
+    # Artifacts (Phase 4)
+    path('artifacts/', views.artifact_list, name='artifact_list'),
+    path('artifacts/<uuid:artifact_id>/', views.artifact_detail, name='artifact_detail'),
+    path('artifacts/<uuid:artifact_id>/download/', views.artifact_download, name='artifact_download'),
 ]

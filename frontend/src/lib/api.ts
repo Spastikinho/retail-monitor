@@ -278,6 +278,51 @@ export interface MonitoringPeriod {
   count: number;
 }
 
+// Run types (Phase 3 spec compliant)
+export interface RunProgress {
+  total: number;
+  completed: number;
+  failed: number;
+  percentage: number;
+}
+
+export interface RunItem {
+  id: string;
+  url: string;
+  retailer: string | null;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  product_title: string | null;
+  price_final: number | null;
+  rating: number | null;
+  reviews_count: number | null;
+  error_message: string | null;
+}
+
+export interface Run {
+  id: string;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
+  progress: RunProgress;
+  created_at: string;
+  started_at: string | null;
+  finished_at: string | null;
+}
+
+export interface CreateRunResponse {
+  success: boolean;
+  run_id: string;
+  created_at: string;
+  items_count: number;
+  message: string;
+  errors: string[];
+}
+
+export interface GetRunResponse {
+  success: boolean;
+  run: Run;
+  results: RunItem[];
+  errors: RunItem[];
+}
+
 // ============================================================================
 // API Methods
 // ============================================================================
@@ -391,4 +436,26 @@ export const api = {
 
   getExportImportUrl: (importId: string) =>
     `/api/v1/export/import/${importId}/`,
+
+  // Runs API (Phase 3 spec compliant)
+  createRun: (data: { urls: string[]; product_type?: string; group_id?: string }) =>
+    request<CreateRunResponse>(
+      '/runs/',
+      { method: 'POST', body: JSON.stringify(data) }
+    ),
+
+  getRun: (runId: string) =>
+    request<GetRunResponse>(`/runs/${runId}/`),
+
+  retryRun: (runId: string) =>
+    request<CreateRunResponse>(
+      `/runs/${runId}/retry/`,
+      { method: 'POST' }
+    ),
+
+  // OpenAPI Schema
+  getSchema: () =>
+    request<Record<string, unknown>>('/schema/'),
 };
+
+export { ApiError };

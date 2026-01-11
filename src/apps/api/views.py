@@ -33,6 +33,31 @@ def api_error(message, status=400):
     return JsonResponse({'error': message, 'success': False}, status=status)
 
 
+def get_api_user(request):
+    """
+    Get the authenticated user for API requests.
+
+    SECURITY: Does NOT auto-create users or fall back to first user.
+    Returns None if not authenticated.
+    """
+    if request.user.is_authenticated:
+        return request.user
+    return None
+
+
+def require_api_user(request):
+    """
+    Get authenticated user or raise an error response.
+
+    Returns (user, None) on success.
+    Returns (None, JsonResponse) if authentication required.
+    """
+    user = get_api_user(request)
+    if user is None:
+        return None, api_error('Authentication required', 401)
+    return user, None
+
+
 # ============= Health Check =============
 
 @require_GET
@@ -774,18 +799,10 @@ def import_urls(request):
             except MonitoringGroup.DoesNotExist:
                 pass
 
-        # Get or create a default user for API imports
-        from django.contrib.auth import get_user_model
-        User = get_user_model()
-        user = request.user if request.user.is_authenticated else User.objects.first()
-
+        # Get authenticated user (required for imports)
+        user = get_api_user(request)
         if not user:
-            # Auto-create a default user for API imports
-            user = User.objects.create_user(
-                username='api_user',
-                email='api@retailmonitor.local',
-                password=User.objects.make_random_password()
-            )
+            return api_error('Authentication required to create imports', 401)
 
         created_imports = []
         errors = []
@@ -1007,7 +1024,6 @@ def monitoring_group_create(request):
     """Create or update a monitoring group."""
     try:
         from apps.scraping.models import MonitoringGroup
-        from django.contrib.auth import get_user_model
 
         try:
             body = json.loads(request.body) if request.body else {}
@@ -1018,11 +1034,10 @@ def monitoring_group_create(request):
         if not name:
             return api_error('Name is required')
 
-        User = get_user_model()
-        user = request.user if request.user.is_authenticated else User.objects.first()
-
+        # Get authenticated user (required)
+        user = get_api_user(request)
         if not user:
-            return api_error('No user available', 500)
+            return api_error('Authentication required to create groups', 401)
 
         group_id = body.get('id')
 
@@ -1177,282 +1192,393 @@ def available_periods(request):
         return api_error(f'Error fetching periods: {str(e)}', 500)
 
 
-# ============= Runs API (Batch Import with Status Tracking) =============
+# ============= Runs API (Phase 3 Spec Compliance) =============
 
 @csrf_exempt
 @require_POST
 def create_run(request):
     """
-    Create a new scraping run with multiple URLs.
+    Create a new run from URLs (Phase 3 spec compliant).
 
-    POST body (JSON):
-        - items: List of { url: string, retailer?: string, name?: string }
-        - options: { product_type?: 'own'|'competitor', group_id?: string, scrape_reviews?: bool }
-
-    Returns:
-        - run_id: UUID for tracking the batch
-        - created_at: Timestamp
-        - items_count: Number of items queued
+    POST /api/runs/
+    body: { urls: [string], product_type?: string, group_id?: string }
+    returns: { run_id, created_at, items_count }
     """
+    from apps.scraping.models import ManualImport, MonitoringGroup
+    from apps.scraping.tasks import process_manual_import
+    from django.contrib.auth import get_user_model
+    from django.utils import timezone
+    import uuid
+
     try:
-        from apps.scraping.models import ManualImport, MonitoringGroup, ScrapeRun
-        from apps.scraping.tasks import process_manual_import
-        from django.contrib.auth import get_user_model
+        body = json.loads(request.body) if request.body else {}
+    except json.JSONDecodeError:
+        return api_error('Invalid JSON body')
+
+    urls = body.get('urls', [])
+    if not urls:
+        return api_error('URLs list is required')
+
+    if len(urls) > 20:
+        return api_error('Maximum 20 URLs per run')
+
+    product_type = body.get('product_type', 'competitor')
+    group_id = body.get('group_id')
+    group = None
+
+    if group_id:
+        try:
+            group = MonitoringGroup.objects.get(pk=group_id)
+        except MonitoringGroup.DoesNotExist:
+            return api_error('Monitoring group not found', 404)
+
+    # Get authenticated user (required for runs)
+    user = get_api_user(request)
+    if not user:
+        return api_error('Authentication required to create runs', 401)
+
+    # Generate a run_id to group these imports
+    run_id = str(uuid.uuid4())
+    created_at = timezone.now()
+    created_imports = []
+    errors = []
+
+    for url in urls:
+        url = url.strip()
+        if not url:
+            continue
+
+        # Check for supported retailers
+        supported = False
+        for pattern in ['ozon.ru', 'wildberries.ru', 'wb.ru', 'perekrestok.ru',
+                       'vkusvill.ru', 'lavka.yandex.ru', 'eda.yandex.ru/lavka']:
+            if pattern in url.lower():
+                supported = True
+                break
+
+        if not supported:
+            errors.append(f'Unsupported retailer: {url[:50]}')
+            continue
 
         try:
-            body = json.loads(request.body) if request.body else {}
-        except json.JSONDecodeError:
-            return api_error('Invalid JSON body')
-
-        items = body.get('items', [])
-        options = body.get('options', {})
-
-        if not items:
-            return api_error('No items provided')
-
-        if len(items) > 50:
-            return api_error('Maximum 50 items per run')
-
-        # Get or create user
-        User = get_user_model()
-        user = request.user if request.user.is_authenticated else User.objects.first()
-
-        if not user:
-            user = User.objects.create_user(
-                username='api_user',
-                email='api@retailmonitor.local',
-                password=User.objects.make_random_password()
+            import_obj = ManualImport.objects.create(
+                user=user,
+                url=url,
+                product_type=product_type,
+                group=group,
+                notes=f'run_id:{run_id}',  # Tag with run_id for grouping
             )
+            created_imports.append(import_obj)
 
-        # Parse options
-        product_type = options.get('product_type', 'competitor')
-        if product_type not in ['own', 'competitor']:
-            product_type = 'competitor'
-
-        scrape_reviews = options.get('scrape_reviews', True)
-
-        group = None
-        if options.get('group_id'):
+            # Queue for processing
             try:
-                group = MonitoringGroup.objects.get(pk=options['group_id'])
-            except MonitoringGroup.DoesNotExist:
-                pass
+                process_manual_import.delay(str(import_obj.pk))
+            except Exception:
+                pass  # Celery not available
 
-        # Create ScrapeRun to track the batch
-        run = ScrapeRun.objects.create(
-            user=user,
-            items_total=len(items),
-            options={
-                'product_type': product_type,
-                'scrape_reviews': scrape_reviews,
-                'group_id': str(group.id) if group else None,
-            }
-        )
+        except Exception as e:
+            errors.append(f'Error creating import for {url[:30]}: {str(e)}')
 
-        # Create ManualImport for each item
-        created_imports = []
-        errors = []
-
-        for item in items:
-            url = item.get('url', '').strip()
-            if not url:
-                errors.append({'url': '', 'error': 'Empty URL'})
-                continue
-
-            # Check for supported retailers
-            supported = False
-            for pattern in ['ozon.ru', 'wildberries.ru', 'wb.ru', 'perekrestok.ru',
-                           'vkusvill.ru', 'lavka.yandex.ru', 'eda.yandex.ru/lavka']:
-                if pattern in url.lower():
-                    supported = True
-                    break
-
-            if not supported:
-                errors.append({'url': url[:50], 'error': 'Unsupported retailer'})
-                run.items_failed += 1
-                run.save(update_fields=['items_failed'])
-                continue
-
-            try:
-                import_obj = ManualImport.objects.create(
-                    user=user,
-                    url=url,
-                    product_type=product_type,
-                    group=group,
-                    custom_name=item.get('name', ''),
-                    run=run,  # Link to run
-                )
-                created_imports.append(str(import_obj.id))
-
-                # Queue for processing
-                try:
-                    process_manual_import.delay(str(import_obj.pk), scrape_reviews=scrape_reviews)
-                except Exception as task_err:
-                    errors.append({'url': url[:50], 'error': f'Queue failed: {str(task_err)[:30]}'})
-
-            except Exception as e:
-                errors.append({'url': url[:50], 'error': str(e)[:50]})
-                run.items_failed += 1
-                run.save(update_fields=['items_failed'])
-
-        # Update run status
-        if created_imports:
-            run.status = 'processing'
-        elif errors:
-            run.status = 'failed'
-        run.save()
-
-        return json_response({
-            'success': True,
-            'run_id': str(run.id),
-            'created_at': run.created_at.isoformat(),
-            'items_count': len(created_imports),
-            'errors': errors if errors else None,
-        })
-
-    except Exception as e:
-        return api_error(f'Error creating run: {str(e)}', 500)
+    return json_response({
+        'success': True,
+        'run_id': run_id,
+        'created_at': created_at.isoformat(),
+        'items_count': len(created_imports),
+        'message': f'Created {len(created_imports)} items in run',
+        'errors': errors,
+    }, status=201)
 
 
 @require_GET
 def get_run(request, run_id):
     """
-    Get run status and results.
+    Get run status and results (Phase 3 spec compliant).
 
-    Returns:
-        - run_id, status, progress
-        - results: List of completed items with data
-        - errors: List of failed items with error messages
+    GET /api/runs/{run_id}/
+    returns: { status, progress, results, errors }
     """
-    try:
-        from apps.scraping.models import ScrapeRun, ManualImport
+    from apps.scraping.models import ManualImport
 
-        try:
-            run = ScrapeRun.objects.get(pk=run_id)
-        except ScrapeRun.DoesNotExist:
-            return api_error('Run not found', 404)
+    # Find imports tagged with this run_id
+    imports = ManualImport.objects.filter(
+        notes__contains=f'run_id:{run_id}'
+    ).select_related('retailer')
 
-        # Get all imports for this run
-        imports = ManualImport.objects.filter(run=run).order_by('created_at')
+    if not imports.exists():
+        return api_error('Run not found', 404)
 
-        # Calculate progress
-        completed = imports.filter(status='completed').count()
-        failed = imports.filter(status='failed').count()
-        processing = imports.filter(status__in=['pending', 'processing']).count()
+    # Calculate progress
+    total = imports.count()
+    completed = imports.filter(status='completed').count()
+    failed = imports.filter(status='failed').count()
+    processing = imports.filter(status__in=['pending', 'processing']).count()
 
-        # Update run stats
-        run.items_completed = completed
-        run.items_failed = failed
+    # Determine overall status
+    if processing > 0:
+        status = 'processing'
+    elif failed == total:
+        status = 'failed'
+    elif completed + failed == total:
+        status = 'completed'
+    else:
+        status = 'pending'
 
-        if processing == 0 and (completed > 0 or failed > 0):
-            run.status = 'completed' if failed == 0 else 'completed_with_errors'
-            run.finished_at = timezone.now()
+    # Build results and errors
+    results = []
+    errors_list = []
 
-        run.save()
+    for imp in imports:
+        item = {
+            'id': str(imp.id),
+            'url': imp.url,
+            'retailer': imp.retailer.name if imp.retailer else None,
+            'status': imp.status,
+            'product_title': imp.product_title,
+            'price_final': float(imp.price_final) if imp.price_final else None,
+            'rating': float(imp.rating) if imp.rating else None,
+            'reviews_count': imp.reviews_count,
+            'error_message': imp.error_message,
+        }
 
-        # Build results and errors lists
-        results = []
-        errors = []
+        if imp.status == 'failed':
+            errors_list.append(item)
+        else:
+            results.append(item)
 
-        for imp in imports:
-            if imp.status == 'completed':
-                results.append({
-                    'id': str(imp.id),
-                    'url': imp.url,
-                    'retailer': imp.retailer.name if imp.retailer else None,
-                    'product_title': imp.product_title,
-                    'custom_name': imp.custom_name,
-                    'price': {
-                        'regular': float(imp.price_regular) if imp.price_regular else None,
-                        'promo': float(imp.price_promo) if imp.price_promo else None,
-                        'final': float(imp.price_final) if imp.price_final else None,
-                        'change': float(imp.price_change) if imp.price_change else None,
-                        'change_pct': float(imp.price_change_pct) if imp.price_change_pct else None,
-                    },
-                    'rating': float(imp.rating) if imp.rating else None,
-                    'reviews_count': imp.reviews_count,
-                    'in_stock': imp.in_stock,
-                    'reviews_summary': {
-                        'positive': imp.reviews_positive_count,
-                        'negative': imp.reviews_negative_count,
-                        'neutral': imp.reviews_neutral_count,
-                    } if imp.reviews_data else None,
-                    'processed_at': imp.processed_at.isoformat() if imp.processed_at else None,
-                })
-            elif imp.status == 'failed':
-                errors.append({
-                    'id': str(imp.id),
-                    'url': imp.url,
-                    'error': imp.error_message,
-                })
+    # Get timestamps
+    first_import = imports.order_by('created_at').first()
+    last_processed = imports.filter(processed_at__isnull=False).order_by('-processed_at').first()
 
-        # Calculate overall progress percentage
-        total = run.items_total or 1
-        progress_pct = int((completed + failed) / total * 100)
-
-        return json_response({
-            'success': True,
-            'run': {
-                'id': str(run.id),
-                'status': run.status,
-                'created_at': run.created_at.isoformat(),
-                'finished_at': run.finished_at.isoformat() if run.finished_at else None,
-                'progress': {
-                    'total': run.items_total,
-                    'completed': completed,
-                    'failed': failed,
-                    'processing': processing,
-                    'percent': progress_pct,
-                },
+    data = {
+        'success': True,
+        'run': {
+            'id': run_id,
+            'status': status,
+            'progress': {
+                'total': total,
+                'completed': completed,
+                'failed': failed,
+                'percentage': round((completed + failed) / total * 100, 1) if total > 0 else 0,
             },
-            'results': results,
-            'errors': errors,
-        })
+            'created_at': first_import.created_at.isoformat() if first_import else None,
+            'started_at': first_import.created_at.isoformat() if first_import else None,
+            'finished_at': last_processed.processed_at.isoformat() if last_processed and status == 'completed' else None,
+        },
+        'results': results,
+        'errors': errors_list,
+    }
 
-    except Exception as e:
-        return api_error(f'Error fetching run: {str(e)}', 500)
+    return json_response(data)
+
+
+@csrf_exempt
+@require_POST
+def retry_run(request, run_id):
+    """
+    Retry failed URLs from a run.
+
+    POST /api/runs/{run_id}/retry/
+    returns: { run_id (new), items_count }
+    """
+    from apps.scraping.models import ManualImport
+    from apps.scraping.tasks import process_manual_import
+    from django.utils import timezone
+    import uuid
+
+    # Get authenticated user (required)
+    user = get_api_user(request)
+    if not user:
+        return api_error('Authentication required to retry runs', 401)
+
+    # Find failed imports from original run
+    failed_imports = ManualImport.objects.filter(
+        notes__contains=f'run_id:{run_id}',
+        status='failed'
+    )
+
+    if not failed_imports.exists():
+        return api_error('No failed items to retry', 400)
+
+    # Create new run with failed URLs
+    new_run_id = str(uuid.uuid4())
+    created_at = timezone.now()
+    created_imports = []
+
+    for failed in failed_imports:
+        try:
+            import_obj = ManualImport.objects.create(
+                user=user,
+                url=failed.url,
+                product_type=failed.product_type,
+                group=failed.group,
+                notes=f'run_id:{new_run_id} retry_of:{run_id}',
+            )
+            created_imports.append(import_obj)
+
+            try:
+                process_manual_import.delay(str(import_obj.pk))
+            except Exception:
+                pass
+
+        except Exception:
+            pass
+
+    return json_response({
+        'success': True,
+        'run_id': new_run_id,
+        'created_at': created_at.isoformat(),
+        'items_count': len(created_imports),
+        'message': f'Retrying {len(created_imports)} failed items',
+        'original_run_id': run_id,
+    }, status=201)
+
+
+# ============= OpenAPI Schema Endpoint =============
+
+@require_GET
+def openapi_schema(request):
+    """
+    Return OpenAPI 3.0 schema for API documentation.
+
+    GET /api/schema/
+    """
+    from .schema import get_openapi_schema
+    return json_response(get_openapi_schema())
+
+
+# ============= Artifacts API =============
+
+@require_GET
+def artifact_list(request):
+    """
+    List artifacts with optional filtering.
+
+    Query params:
+        - type: Filter by artifact type
+        - listing_id: Filter by listing
+        - session_id: Filter by scrape session
+        - import_id: Filter by manual import
+        - limit: Max results (default 50)
+        - offset: Pagination offset
+    """
+    from apps.core.models import Artifact
+
+    artifacts = Artifact.objects.all()
+
+    # Apply filters
+    if request.GET.get('type'):
+        artifacts = artifacts.filter(artifact_type=request.GET.get('type'))
+
+    if request.GET.get('listing_id'):
+        artifacts = artifacts.filter(listing_id=request.GET.get('listing_id'))
+
+    if request.GET.get('session_id'):
+        artifacts = artifacts.filter(scrape_session_id=request.GET.get('session_id'))
+
+    if request.GET.get('import_id'):
+        artifacts = artifacts.filter(manual_import_id=request.GET.get('import_id'))
+
+    # Pagination
+    limit = min(int(request.GET.get('limit', 50)), 100)
+    offset = int(request.GET.get('offset', 0))
+
+    total = artifacts.count()
+    artifacts = artifacts[offset:offset + limit]
+
+    return json_response({
+        'success': True,
+        'total': total,
+        'artifacts': [
+            {
+                'id': str(a.id),
+                'storage_key': a.storage_key,
+                'artifact_type': a.artifact_type,
+                'content_type': a.content_type,
+                'size': a.size,
+                'filename': a.filename,
+                'created_at': a.created_at.isoformat(),
+                'listing_id': str(a.listing_id) if a.listing_id else None,
+                'session_id': str(a.scrape_session_id) if a.scrape_session_id else None,
+                'import_id': str(a.manual_import_id) if a.manual_import_id else None,
+            }
+            for a in artifacts
+        ]
+    })
 
 
 @require_GET
-def list_runs(request):
+def artifact_detail(request, artifact_id):
     """
-    List recent runs.
+    Get artifact details and download URL.
 
-    Query params:
-        - status: Filter by status
-        - limit: Max results (default 20)
-        - offset: Pagination offset
+    Returns metadata and a signed URL for downloading.
     """
+    from apps.core.models import Artifact
+    from datetime import timedelta
+
     try:
-        from apps.scraping.models import ScrapeRun
+        artifact = Artifact.objects.get(pk=artifact_id)
+    except Artifact.DoesNotExist:
+        return api_error('Artifact not found', 404)
 
-        runs = ScrapeRun.objects.all()
+    # Generate download URL (1 hour expiry)
+    download_url = artifact.get_download_url(expires_in=timedelta(hours=1))
 
-        if request.GET.get('status'):
-            runs = runs.filter(status=request.GET.get('status'))
+    return json_response({
+        'success': True,
+        'artifact': {
+            'id': str(artifact.id),
+            'storage_key': artifact.storage_key,
+            'artifact_type': artifact.artifact_type,
+            'content_type': artifact.content_type,
+            'size': artifact.size,
+            'sha256': artifact.sha256,
+            'filename': artifact.filename,
+            'description': artifact.description,
+            'metadata': artifact.metadata,
+            'created_at': artifact.created_at.isoformat(),
+            'expires_at': artifact.expires_at.isoformat() if artifact.expires_at else None,
+            'listing_id': str(artifact.listing_id) if artifact.listing_id else None,
+            'session_id': str(artifact.scrape_session_id) if artifact.scrape_session_id else None,
+            'import_id': str(artifact.manual_import_id) if artifact.manual_import_id else None,
+        },
+        'download_url': download_url,
+    })
 
-        limit = min(int(request.GET.get('limit', 20)), 100)
-        offset = int(request.GET.get('offset', 0))
 
-        total = runs.count()
-        runs = runs.order_by('-created_at')[offset:offset + limit]
+@require_GET
+def artifact_download(request, artifact_id):
+    """
+    Redirect to artifact download URL.
 
-        return json_response({
-            'success': True,
-            'total': total,
-            'runs': [
-                {
-                    'id': str(r.id),
-                    'status': r.status,
-                    'items_total': r.items_total,
-                    'items_completed': r.items_completed,
-                    'items_failed': r.items_failed,
-                    'created_at': r.created_at.isoformat(),
-                    'finished_at': r.finished_at.isoformat() if r.finished_at else None,
-                }
-                for r in runs
-            ]
-        })
+    For local storage: serves file directly.
+    For object storage: redirects to signed URL.
+    """
+    from django.http import HttpResponse, HttpResponseRedirect, FileResponse
+    from apps.core.models import Artifact
+    from django.conf import settings
+    from datetime import timedelta
 
-    except Exception as e:
-        return api_error(f'Error listing runs: {str(e)}', 500)
+    try:
+        artifact = Artifact.objects.get(pk=artifact_id)
+    except Artifact.DoesNotExist:
+        return api_error('Artifact not found', 404)
+
+    # Check storage backend
+    storage_backend = getattr(settings, 'ARTIFACT_STORAGE_BACKEND', 'local')
+
+    if storage_backend == 'local':
+        # Serve file directly for local storage
+        try:
+            content = artifact.download()
+            response = HttpResponse(content, content_type=artifact.content_type)
+            filename = artifact.filename or artifact.storage_key.split('/')[-1]
+            response['Content-Disposition'] = f'attachment; filename="{filename}"'
+            response['Content-Length'] = len(content)
+            return response
+        except FileNotFoundError:
+            return api_error('Artifact file not found', 404)
+    else:
+        # Redirect to signed URL for object storage
+        download_url = artifact.get_download_url(expires_in=timedelta(hours=1))
+        return HttpResponseRedirect(download_url)

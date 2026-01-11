@@ -221,6 +221,49 @@ make test      # Run tests
 make clean     # Remove containers and data
 ```
 
+## Security
+
+### Admin User Setup
+
+Create admin user securely using the bootstrap command:
+
+```bash
+ALLOW_BOOTSTRAP_ADMIN=true \
+ADMIN_EMAIL=admin@example.com \
+ADMIN_PASSWORD=your_secure_password_12chars \
+docker compose exec web python manage.py bootstrap_admin
+```
+
+After creating, remove `ADMIN_PASSWORD` from your environment.
+
+### Production Settings
+
+1. **Secret key**: Generate a unique `DJANGO_SECRET_KEY`
+   ```bash
+   openssl rand -base64 50
+   ```
+
+2. **Debug mode**: Set `DJANGO_DEBUG=false`
+
+3. **Admin IP restriction** (optional):
+   ```
+   ADMIN_IP_ALLOWLIST=10.0.0.0/8,192.168.1.100
+   ```
+
+### Object Storage (S3/R2) for Production
+
+For Railway and other cloud platforms, configure S3-compatible storage:
+
+```bash
+# .env for Cloudflare R2
+ARTIFACT_STORAGE_BACKEND=r2
+ARTIFACT_S3_ENDPOINT=https://xxxx.r2.cloudflarestorage.com
+ARTIFACT_S3_BUCKET=retail-monitor-artifacts
+ARTIFACT_S3_ACCESS_KEY=your_access_key
+ARTIFACT_S3_SECRET_KEY=your_secret_key
+ARTIFACT_S3_REGION=auto
+```
+
 ## License
 
 Internal tool.

@@ -184,6 +184,13 @@ if not DEBUG:
     SECURE_CONTENT_TYPE_NOSNIFF = True
     X_FRAME_OPTIONS = 'DENY'
 
+    # Trust Railway/Vercel proxy for HTTPS detection
+    # Railway sets X-Forwarded-Proto header
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+    # Trust proxy for host detection (Railway edge proxy)
+    USE_X_FORWARDED_HOST = True
+
 # Custom settings for Retail Monitor
 ENCRYPTION_KEY = env('ENCRYPTION_KEY', default='')
 

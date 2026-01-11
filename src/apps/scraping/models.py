@@ -314,6 +314,74 @@ class ReviewItem(BaseModel):
         super().save(*args, **kwargs)
 
 
+class ScrapeRun(BaseModel):
+    """
+    A batch run of scraping jobs - groups multiple ManualImports together.
+    Allows tracking progress and results as a unit.
+    """
+
+    class StatusChoices(models.TextChoices):
+        PENDING = 'pending', 'Pending'
+        PROCESSING = 'processing', 'Processing'
+        COMPLETED = 'completed', 'Completed'
+        COMPLETED_WITH_ERRORS = 'completed_with_errors', 'Completed with errors'
+        FAILED = 'failed', 'Failed'
+
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name='scrape_runs',
+        verbose_name='User',
+    )
+    status = models.CharField(
+        'Status',
+        max_length=30,
+        choices=StatusChoices.choices,
+        default=StatusChoices.PENDING,
+    )
+
+    items_total = models.PositiveIntegerField('Total items', default=0)
+    items_completed = models.PositiveIntegerField('Completed', default=0)
+    items_failed = models.PositiveIntegerField('Failed', default=0)
+
+    options = models.JSONField(
+        'Run options',
+        default=dict,
+        blank=True,
+        help_text='Options passed when creating the run',
+    )
+
+    finished_at = models.DateTimeField('Finished at', null=True, blank=True)
+
+    # Artifact storage pointer (for future S3/R2 integration)
+    artifact_bucket = models.CharField(
+        'Artifact bucket',
+        max_length=100,
+        blank=True,
+        help_text='S3/R2 bucket name for raw artifacts',
+    )
+    artifact_prefix = models.CharField(
+        'Artifact prefix',
+        max_length=200,
+        blank=True,
+        help_text='Prefix/folder path in bucket',
+    )
+
+    class Meta:
+        verbose_name = 'Scrape Run'
+        verbose_name_plural = 'Scrape Runs'
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'Run {self.created_at:%Y-%m-%d %H:%M} ({self.status})'
+
+    @property
+    def progress_percent(self):
+        if self.items_total == 0:
+            return 0
+        return int((self.items_completed + self.items_failed) / self.items_total * 100)
+
+
 class MonitoringGroup(BaseModel):
     """
     Group for organizing monitored products (e.g., "My Products", "Competitor A").
@@ -402,6 +470,15 @@ class ManualImport(BaseModel):
         blank=True,
         related_name='imports',
         verbose_name='Группа',
+    )
+    run = models.ForeignKey(
+        ScrapeRun,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='imports',
+        verbose_name='Run',
+        help_text='Batch run this import belongs to',
     )
     custom_name = models.CharField(
         'Своё название',

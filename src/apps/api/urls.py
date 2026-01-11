@@ -57,4 +57,9 @@ urlpatterns = [
 
     # Periods
     path('periods/', views.available_periods, name='available_periods'),
+
+    # Runs API (batch import with status tracking)
+    path('runs/', views.list_runs, name='list_runs'),
+    path('runs/create/', views.create_run, name='create_run'),
+    path('runs/<uuid:run_id>/', views.get_run, name='get_run'),
 ]

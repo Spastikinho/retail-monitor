@@ -1175,3 +1175,284 @@ def available_periods(request):
 
     except Exception as e:
         return api_error(f'Error fetching periods: {str(e)}', 500)
+
+
+# ============= Runs API (Batch Import with Status Tracking) =============
+
+@csrf_exempt
+@require_POST
+def create_run(request):
+    """
+    Create a new scraping run with multiple URLs.
+
+    POST body (JSON):
+        - items: List of { url: string, retailer?: string, name?: string }
+        - options: { product_type?: 'own'|'competitor', group_id?: string, scrape_reviews?: bool }
+
+    Returns:
+        - run_id: UUID for tracking the batch
+        - created_at: Timestamp
+        - items_count: Number of items queued
+    """
+    try:
+        from apps.scraping.models import ManualImport, MonitoringGroup, ScrapeRun
+        from apps.scraping.tasks import process_manual_import
+        from django.contrib.auth import get_user_model
+
+        try:
+            body = json.loads(request.body) if request.body else {}
+        except json.JSONDecodeError:
+            return api_error('Invalid JSON body')
+
+        items = body.get('items', [])
+        options = body.get('options', {})
+
+        if not items:
+            return api_error('No items provided')
+
+        if len(items) > 50:
+            return api_error('Maximum 50 items per run')
+
+        # Get or create user
+        User = get_user_model()
+        user = request.user if request.user.is_authenticated else User.objects.first()
+
+        if not user:
+            user = User.objects.create_user(
+                username='api_user',
+                email='api@retailmonitor.local',
+                password=User.objects.make_random_password()
+            )
+
+        # Parse options
+        product_type = options.get('product_type', 'competitor')
+        if product_type not in ['own', 'competitor']:
+            product_type = 'competitor'
+
+        scrape_reviews = options.get('scrape_reviews', True)
+
+        group = None
+        if options.get('group_id'):
+            try:
+                group = MonitoringGroup.objects.get(pk=options['group_id'])
+            except MonitoringGroup.DoesNotExist:
+                pass
+
+        # Create ScrapeRun to track the batch
+        run = ScrapeRun.objects.create(
+            user=user,
+            items_total=len(items),
+            options={
+                'product_type': product_type,
+                'scrape_reviews': scrape_reviews,
+                'group_id': str(group.id) if group else None,
+            }
+        )
+
+        # Create ManualImport for each item
+        created_imports = []
+        errors = []
+
+        for item in items:
+            url = item.get('url', '').strip()
+            if not url:
+                errors.append({'url': '', 'error': 'Empty URL'})
+                continue
+
+            # Check for supported retailers
+            supported = False
+            for pattern in ['ozon.ru', 'wildberries.ru', 'wb.ru', 'perekrestok.ru',
+                           'vkusvill.ru', 'lavka.yandex.ru', 'eda.yandex.ru/lavka']:
+                if pattern in url.lower():
+                    supported = True
+                    break
+
+            if not supported:
+                errors.append({'url': url[:50], 'error': 'Unsupported retailer'})
+                run.items_failed += 1
+                run.save(update_fields=['items_failed'])
+                continue
+
+            try:
+                import_obj = ManualImport.objects.create(
+                    user=user,
+                    url=url,
+                    product_type=product_type,
+                    group=group,
+                    custom_name=item.get('name', ''),
+                    run=run,  # Link to run
+                )
+                created_imports.append(str(import_obj.id))
+
+                # Queue for processing
+                try:
+                    process_manual_import.delay(str(import_obj.pk), scrape_reviews=scrape_reviews)
+                except Exception as task_err:
+                    errors.append({'url': url[:50], 'error': f'Queue failed: {str(task_err)[:30]}'})
+
+            except Exception as e:
+                errors.append({'url': url[:50], 'error': str(e)[:50]})
+                run.items_failed += 1
+                run.save(update_fields=['items_failed'])
+
+        # Update run status
+        if created_imports:
+            run.status = 'processing'
+        elif errors:
+            run.status = 'failed'
+        run.save()
+
+        return json_response({
+            'success': True,
+            'run_id': str(run.id),
+            'created_at': run.created_at.isoformat(),
+            'items_count': len(created_imports),
+            'errors': errors if errors else None,
+        })
+
+    except Exception as e:
+        return api_error(f'Error creating run: {str(e)}', 500)
+
+
+@require_GET
+def get_run(request, run_id):
+    """
+    Get run status and results.
+
+    Returns:
+        - run_id, status, progress
+        - results: List of completed items with data
+        - errors: List of failed items with error messages
+    """
+    try:
+        from apps.scraping.models import ScrapeRun, ManualImport
+
+        try:
+            run = ScrapeRun.objects.get(pk=run_id)
+        except ScrapeRun.DoesNotExist:
+            return api_error('Run not found', 404)
+
+        # Get all imports for this run
+        imports = ManualImport.objects.filter(run=run).order_by('created_at')
+
+        # Calculate progress
+        completed = imports.filter(status='completed').count()
+        failed = imports.filter(status='failed').count()
+        processing = imports.filter(status__in=['pending', 'processing']).count()
+
+        # Update run stats
+        run.items_completed = completed
+        run.items_failed = failed
+
+        if processing == 0 and (completed > 0 or failed > 0):
+            run.status = 'completed' if failed == 0 else 'completed_with_errors'
+            run.finished_at = timezone.now()
+
+        run.save()
+
+        # Build results and errors lists
+        results = []
+        errors = []
+
+        for imp in imports:
+            if imp.status == 'completed':
+                results.append({
+                    'id': str(imp.id),
+                    'url': imp.url,
+                    'retailer': imp.retailer.name if imp.retailer else None,
+                    'product_title': imp.product_title,
+                    'custom_name': imp.custom_name,
+                    'price': {
+                        'regular': float(imp.price_regular) if imp.price_regular else None,
+                        'promo': float(imp.price_promo) if imp.price_promo else None,
+                        'final': float(imp.price_final) if imp.price_final else None,
+                        'change': float(imp.price_change) if imp.price_change else None,
+                        'change_pct': float(imp.price_change_pct) if imp.price_change_pct else None,
+                    },
+                    'rating': float(imp.rating) if imp.rating else None,
+                    'reviews_count': imp.reviews_count,
+                    'in_stock': imp.in_stock,
+                    'reviews_summary': {
+                        'positive': imp.reviews_positive_count,
+                        'negative': imp.reviews_negative_count,
+                        'neutral': imp.reviews_neutral_count,
+                    } if imp.reviews_data else None,
+                    'processed_at': imp.processed_at.isoformat() if imp.processed_at else None,
+                })
+            elif imp.status == 'failed':
+                errors.append({
+                    'id': str(imp.id),
+                    'url': imp.url,
+                    'error': imp.error_message,
+                })
+
+        # Calculate overall progress percentage
+        total = run.items_total or 1
+        progress_pct = int((completed + failed) / total * 100)
+
+        return json_response({
+            'success': True,
+            'run': {
+                'id': str(run.id),
+                'status': run.status,
+                'created_at': run.created_at.isoformat(),
+                'finished_at': run.finished_at.isoformat() if run.finished_at else None,
+                'progress': {
+                    'total': run.items_total,
+                    'completed': completed,
+                    'failed': failed,
+                    'processing': processing,
+                    'percent': progress_pct,
+                },
+            },
+            'results': results,
+            'errors': errors,
+        })
+
+    except Exception as e:
+        return api_error(f'Error fetching run: {str(e)}', 500)
+
+
+@require_GET
+def list_runs(request):
+    """
+    List recent runs.
+
+    Query params:
+        - status: Filter by status
+        - limit: Max results (default 20)
+        - offset: Pagination offset
+    """
+    try:
+        from apps.scraping.models import ScrapeRun
+
+        runs = ScrapeRun.objects.all()
+
+        if request.GET.get('status'):
+            runs = runs.filter(status=request.GET.get('status'))
+
+        limit = min(int(request.GET.get('limit', 20)), 100)
+        offset = int(request.GET.get('offset', 0))
+
+        total = runs.count()
+        runs = runs.order_by('-created_at')[offset:offset + limit]
+
+        return json_response({
+            'success': True,
+            'total': total,
+            'runs': [
+                {
+                    'id': str(r.id),
+                    'status': r.status,
+                    'items_total': r.items_total,
+                    'items_completed': r.items_completed,
+                    'items_failed': r.items_failed,
+                    'created_at': r.created_at.isoformat(),
+                    'finished_at': r.finished_at.isoformat() if r.finished_at else None,
+                }
+                for r in runs
+            ]
+        })
+
+    except Exception as e:
+        return api_error(f'Error listing runs: {str(e)}', 500)

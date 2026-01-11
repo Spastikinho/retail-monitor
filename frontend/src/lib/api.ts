@@ -1,4 +1,11 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://web-production-9f63.up.railway.app';
+// In production, use same-origin proxy (via Vercel rewrites) to avoid CORS
+// In development, fallback to direct API URL
+const API_BASE = typeof window !== 'undefined' && process.env.NODE_ENV === 'production'
+  ? '' // Same-origin: /api/v1/... proxied by Vercel
+  : (process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000');
+
+// Direct API URL for export links that need full URLs
+const DIRECT_API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://web-production-9f63.up.railway.app';
 
 interface RequestOptions extends RequestInit {
   params?: Record<string, string | number | boolean | undefined>;
@@ -17,7 +24,7 @@ class ApiError extends Error {
 async function request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
   const { params, ...fetchOptions } = options;
 
-  let url = `${API_URL}/api/v1${endpoint}`;
+  let url = `${API_BASE}/api/v1${endpoint}`;
 
   if (params) {
     const searchParams = new URLSearchParams();
@@ -301,14 +308,14 @@ export const api = {
   getPeriods: () =>
     request<{ success: boolean; periods: MonitoringPeriod[] }>('/periods/'),
 
-  // Excel Export URLs (for direct download)
+  // Excel Export URLs (for direct download - need full URLs for file downloads)
   getExportMonitoringUrl: (period?: string) => {
-    const base = `${API_URL}/api/v1/export/monitoring/`;
+    const base = `${DIRECT_API_URL}/api/v1/export/monitoring/`;
     return period ? `${base}?period=${period}` : base;
   },
 
   getExportImportUrl: (importId: string) =>
-    `${API_URL}/api/v1/export/import/${importId}/`,
+    `${DIRECT_API_URL}/api/v1/export/import/${importId}/`,
 };
 
 export { ApiError };

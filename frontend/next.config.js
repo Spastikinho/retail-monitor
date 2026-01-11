@@ -1,8 +1,14 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'standalone',
+
+  // Environment-aware API URL
+  env: {
+    NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'https://web-production-9f63.up.railway.app',
+  },
+
+  // Rewrites for local development - production uses vercel.json rewrites
   async rewrites() {
-    // Only proxy API calls in development
     if (process.env.NODE_ENV === 'development') {
       return [
         {
@@ -11,6 +17,7 @@ const nextConfig = {
         },
       ];
     }
+    // Production rewrites handled by vercel.json
     return [];
   },
 };

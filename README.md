@@ -1,147 +1,226 @@
 # Retail Monitor
 
-Система мониторинга цен и отзывов товаров на розничных площадках.
+Price monitoring and competitor analysis platform for Russian retail marketplaces.
 
-## Быстрый старт
+## Architecture
 
-### Требования
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                           USER INTERFACE                                 │
+│                                                                         │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │                    FRONTEND (Vercel)                             │   │
+│  │                    Next.js + React + TypeScript                  │   │
+│  │                    /frontend directory                           │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+│                               │                                         │
+│                               │ API calls via Vercel rewrites           │
+│                               │ (same-origin, no CORS)                  │
+│                               ▼                                         │
+│  ┌─────────────────────────────────────────────────────────────────┐   │
+│  │                    BACKEND (Railway)                             │   │
+│  │  ┌────────────┐  ┌────────────┐  ┌────────────┐               │   │
+│  │  │  Django    │  │   Celery   │  │   Celery   │               │   │
+│  │  │  API/Admin │  │   Worker   │  │   Beat     │               │   │
+│  │  └────────────┘  └────────────┘  └────────────┘               │   │
+│  │         │               │                │                     │   │
+│  │         └───────────────┴────────────────┘                     │   │
+│  │                         │                                       │   │
+│  │         ┌───────────────┴───────────────┐                      │   │
+│  │         ▼                               ▼                      │   │
+│  │  ┌─────────────┐                 ┌─────────────┐               │   │
+│  │  │ PostgreSQL  │                 │    Redis    │               │   │
+│  │  │  (Railway)  │                 │  (Railway)  │               │   │
+│  │  └─────────────┘                 └─────────────┘               │   │
+│  └─────────────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────────┘
+```
 
-- Docker и Docker Compose
-- Git
+## UI Entry Point
 
-### Установка
+**The Next.js frontend (`/frontend`) is the SINGLE source of UI truth.**
 
-1. Клонируйте репозиторий и перейдите в директорию:
+- **Production**: Frontend served by Vercel, API by Django/Railway
+- **Django templates**: Deprecated for user-facing features; Admin panel (`/admin/`) remains for internal ops
+- **Django `UI_MODE`**: Set to `api-only` in production (default), `django` for local development with templates
+
+## Quick Start (Local Development)
+
+### Prerequisites
+- Docker and Docker Compose
+- Node.js 20+ (for frontend)
+
+### Backend Setup
+
 ```bash
+# Clone and enter directory
 cd retail_monitor
-```
 
-2. Создайте файл окружения:
-```bash
+# Create environment file
 cp .env.example .env
-# Отредактируйте .env, установив секреты
-```
+# Edit .env with your secrets
 
-3. Запустите сервисы:
-```bash
+# Start services
 make build
 make up
-```
-
-4. Инициализируйте приложение:
-```bash
 make init
+
+# Backend runs at http://localhost:8000
 ```
 
-5. Откройте в браузере: http://localhost:8000
-   - Логин: `admin`
-   - Пароль: `admin`
-
-## Команды
+### Frontend Setup
 
 ```bash
-make up        # Запустить все сервисы
-make down      # Остановить сервисы
-make logs      # Просмотр логов
-make shell     # Django shell
-make bash      # Bash в контейнере web
-make migrate   # Применить миграции
-make test      # Запустить тесты
-make clean     # Удалить контейнеры и данные
+cd frontend
+
+# Install dependencies
+npm ci
+
+# Create local env
+cp .env.example .env.local
+# Set NEXT_PUBLIC_API_URL=http://localhost:8000
+
+# Run development server
+npm run dev
+
+# Frontend runs at http://localhost:3000
 ```
 
-## Архитектура
+## Deployment
 
+### Vercel (Frontend)
+
+**Settings:**
+| Setting | Value |
+|---------|-------|
+| Root Directory | `frontend` |
+| Framework Preset | Next.js |
+| Build Command | `npm run build` |
+| Install Command | `npm ci` |
+| Output Directory | `.next` |
+| Node.js Version | 20.x |
+
+**Environment Variables:**
 ```
-┌─────────────┐  ┌─────────────┐  ┌─────────────┐
-│     web     │  │   worker    │  │  scheduler  │
-│   Django    │  │   Celery    │  │ Celery Beat │
-│   :8000     │  │ +Playwright │  │             │
-└──────┬──────┘  └──────┬──────┘  └──────┬──────┘
-       │                │                │
-       └────────────────┴────────────────┘
-                        │
-       ┌────────────────┴────────────────┐
-       │                                 │
-       ▼                                 ▼
-┌─────────────┐                 ┌─────────────┐
-│  PostgreSQL │                 │    Redis    │
-│    :5432    │                 │    :6379    │
-└─────────────┘                 └─────────────┘
+NEXT_PUBLIC_API_URL=https://your-railway-app.up.railway.app
 ```
 
-## Структура проекта
+**Local Build Test:**
+```bash
+cd frontend
+npm ci
+npm run build
+# Verify: No errors, .next directory created
+```
+
+### Railway (Backend)
+
+Deploy Django, Celery Worker, and Celery Beat as separate services sharing the same codebase.
+
+**Environment Variables:**
+```env
+# Required
+DATABASE_URL=postgresql://...
+REDIS_URL=redis://...
+DJANGO_SECRET_KEY=<generate-secure-key>
+DJANGO_ALLOWED_HOSTS=your-app.up.railway.app
+
+# Frontend integration
+FRONTEND_URL=https://your-vercel-app.vercel.app
+UI_MODE=api-only
+CORS_ALLOWED_ORIGINS=https://your-vercel-app.vercel.app
+CSRF_TRUSTED_ORIGINS=https://your-vercel-app.vercel.app
+
+# Optional
+TELEGRAM_BOT_TOKEN=<your-token>
+TELEGRAM_CHAT_ID=<your-chat-id>
+OPENAI_API_KEY=<your-key>
+```
+
+## Smoke Test
+
+After deployment, verify:
+
+1. **Frontend**: Visit `https://your-vercel-app.vercel.app/smoke`
+   - Should show "Frontend: Deployed"
+   - Should show "Backend: ok" (if backend is running)
+
+2. **Backend API**: `curl https://your-railway-app.up.railway.app/api/v1/health/`
+   - Should return `{"status": "ok", ...}`
+
+3. **Admin**: Visit `https://your-railway-app.up.railway.app/admin/`
+   - Should show Django admin login
+
+## Supported Retailers
+
+| Retailer | Prices | Reviews | Status |
+|----------|--------|---------|--------|
+| Ozon | ✓ | ✓ | Full support |
+| Wildberries | ✓ | ✓ | Full support |
+| VkusVill | ✓ | ✓ | Full support |
+| Perekrestok | ✓ | ✓ | Full support |
+| Yandex Lavka | ✓ | ✓ | Full support |
+
+## Project Structure
 
 ```
 retail_monitor/
-├── docker/                 # Docker конфигурация
-├── src/
-│   ├── config/            # Django настройки
+├── frontend/              # Next.js frontend (Vercel)
+│   ├── src/
+│   │   ├── app/          # App Router pages
+│   │   ├── components/   # React components
+│   │   └── lib/          # API client, utilities
+│   ├── vercel.json       # Vercel configuration
+│   └── package.json
+│
+├── src/                   # Django backend (Railway)
+│   ├── config/           # Django settings
 │   ├── apps/
-│   │   ├── core/          # Базовые модели, dashboard
-│   │   ├── products/      # Товары и листинги
-│   │   ├── retailers/     # Ретейлеры и сессии
-│   │   ├── scraping/      # Сбор данных, коннекторы
-│   │   ├── analytics/     # LLM анализ (Фаза 3)
-│   │   ├── alerts/        # Оповещения (Фаза 4)
-│   │   └── reports/       # Отчёты (Фаза 3)
-│   ├── static/            # Статические файлы
-│   └── templates/         # Базовые шаблоны
-├── data/
-│   ├── raw_snapshots/     # Сырые данные
-│   ├── exports/           # Экспортированные отчёты
-│   └── imports/           # Файлы для импорта
-├── scripts/               # Скрипты инициализации
-├── tests/                 # Тесты
-├── docker-compose.yml
-├── requirements.txt
-└── Makefile
+│   │   ├── api/          # REST API endpoints
+│   │   ├── core/         # Health checks, base
+│   │   ├── products/     # Product management
+│   │   ├── retailers/    # Retailer configuration
+│   │   ├── scraping/     # Connectors, Celery tasks
+│   │   ├── alerts/       # Alert rules, notifications
+│   │   └── reports/      # Export functionality
+│   └── templates/        # Django templates (deprecated for UI)
+│
+├── data/                  # Local data (not for production)
+│   ├── raw_snapshots/    # Use object storage in prod
+│   ├── exports/          # Use object storage in prod
+│   └── imports/          # Use object storage in prod
+│
+├── docker-compose.yml    # Local development
+└── Makefile              # Development commands
 ```
 
-## Фазы разработки
+## API Endpoints
 
-- [x] **Фаза 0**: Инфраструктура (Docker, Django, Celery)
-- [x] **Фаза 1**: MVP — товары, листинги, сбор цен (Ozon)
-- [x] **Фаза 2**: Отзывы, расписание, ВкусВилл
-- [x] **Фаза 3**: LLM анализ, экспорт XLSX
-- [x] **Фаза 4**: Алерты, Telegram, остальные ретейлеры
-- [x] **Фаза 5**: Dashboard, тесты, hardening
+Key API endpoints consumed by the frontend:
 
-## Поддерживаемые ретейлеры
+- `GET /api/v1/health/` - Health check
+- `GET /api/v1/products/` - List products
+- `GET /api/v1/retailers/` - List retailers
+- `POST /api/v1/imports/create/` - Create URL imports
+- `GET /api/v1/imports/` - List imports
+- `GET /api/v1/analytics/summary/` - Dashboard stats
+- `GET /api/v1/alerts/` - List alert events
 
-| Ретейлер | Цены | Отзывы | Статус |
-|----------|------|--------|--------|
-| Ozon | + | + | Полная поддержка |
-| ВкусВилл | + | + | Полная поддержка |
-| Перекрёсток | + | + | Полная поддержка |
-| Яндекс Лавка | + | + | Полная поддержка |
+See `frontend/src/lib/api.ts` for full API client.
 
-## Ключевые возможности
+## Development Commands
 
-### Мониторинг цен
-- Автоматический сбор цен по расписанию (ежемесячно)
-- Отслеживание обычных, промо и карточных цен
-- История изменений с визуализацией
+```bash
+make up        # Start all services
+make down      # Stop services
+make logs      # View logs
+make shell     # Django shell
+make bash      # Bash in web container
+make migrate   # Apply migrations
+make test      # Run tests
+make clean     # Remove containers and data
+```
 
-### Анализ отзывов
-- Сбор и хранение отзывов покупателей
-- LLM-анализ с извлечением тем и тональности
-- Сравнение с конкурентами
+## License
 
-### Оповещения
-- Telegram-уведомления о важных событиях
-- Настраиваемые правила: рост/падение цены, негативные отзывы
-- Cooldown для предотвращения спама
-
-### Экспорт
-- Выгрузка данных в Excel (XLSX)
-- Фильтрация по периодам, товарам, ретейлерам
-
-## Мониторинг
-
-- `/health/` — проверка здоровья сервиса
-- `/ready/` — проверка готовности (для K8s/Docker)
-
-## Лицензия
-
-Внутренний инструмент.
+Internal tool.

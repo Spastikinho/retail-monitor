@@ -285,7 +285,10 @@ if SENTRY_DSN:
     )
 
 # CORS Configuration
-CORS_ALLOWED_ORIGINS = env('CORS_ALLOWED_ORIGINS')
+# Default includes the Railway production URL
+CORS_ALLOWED_ORIGINS = env('CORS_ALLOWED_ORIGINS', default=[
+    'https://web-production-9f63.up.railway.app',
+])
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_HEADERS = [
     'accept',
@@ -300,7 +303,10 @@ CORS_ALLOW_HEADERS = [
 ]
 
 # CSRF Trusted Origins (for Railway and Vercel)
-CSRF_TRUSTED_ORIGINS = env('CSRF_TRUSTED_ORIGINS')
+# Must include the full origin URL with https://
+CSRF_TRUSTED_ORIGINS = env('CSRF_TRUSTED_ORIGINS', default=[
+    'https://web-production-9f63.up.railway.app',
+])
 
 # Django REST Framework
 REST_FRAMEWORK = {
@@ -322,3 +328,9 @@ if not DEBUG:
     REST_FRAMEWORK['DEFAULT_AUTHENTICATION_CLASSES'].insert(
         0, 'rest_framework.authentication.TokenAuthentication'
     )
+
+# Frontend URL (Vercel deployment) - used for redirects in production
+FRONTEND_URL = env('FRONTEND_URL', default='http://localhost:3000')
+
+# UI Mode: 'api-only' in production (Next.js frontend), 'django' for local dev with templates
+UI_MODE = env('UI_MODE', default='api-only' if not DEBUG else 'django')

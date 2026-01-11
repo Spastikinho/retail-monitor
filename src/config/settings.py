@@ -285,9 +285,10 @@ if SENTRY_DSN:
     )
 
 # CORS Configuration
-# Default includes the Railway production URL
+# Default includes the Railway production URL and Vercel frontend
 CORS_ALLOWED_ORIGINS = env('CORS_ALLOWED_ORIGINS', default=[
     'https://web-production-9f63.up.railway.app',
+    'https://olivas-retail-monitor.vercel.app',
 ])
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_HEADERS = [
@@ -306,6 +307,7 @@ CORS_ALLOW_HEADERS = [
 # Must include the full origin URL with https://
 CSRF_TRUSTED_ORIGINS = env('CSRF_TRUSTED_ORIGINS', default=[
     'https://web-production-9f63.up.railway.app',
+    'https://olivas-retail-monitor.vercel.app',
 ])
 
 # Django REST Framework

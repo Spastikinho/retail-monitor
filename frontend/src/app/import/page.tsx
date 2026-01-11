@@ -18,6 +18,7 @@ import {
 import { Sidebar } from '@/components/Sidebar';
 import { Button } from '@/components/Button';
 import { SkeletonTable, Skeleton } from '@/components/Skeleton';
+import { ApiErrorCard, createApiErrorInfo, logApiError, ApiErrorInfo } from '@/components/ApiErrorCard';
 import { api, ManualImport } from '@/lib/api';
 import {
   validateUrls,
@@ -43,8 +44,10 @@ export default function ImportPage() {
   const [imports, setImports] = useState<ManualImport[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<ApiErrorInfo | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [isRetrying, setIsRetrying] = useState(false);
   // Retailer overrides: map of line index to retailer code
   const [retailerOverrides, setRetailerOverrides] = useState<Record<number, string>>({});
 
@@ -131,14 +134,23 @@ export default function ImportPage() {
 
   const fetchImports = async () => {
     setIsLoading(true);
+    setLoadError(null);
     try {
       const res = await api.getImports({ limit: 50 });
       setImports(res.imports);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load imports');
+      const errorInfo = createApiErrorInfo('Loading imports', err, '/api/v1/imports/');
+      logApiError(errorInfo);
+      setLoadError(errorInfo);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleRetryLoad = async () => {
+    setIsRetrying(true);
+    await fetchImports();
+    setIsRetrying(false);
   };
 
   useEffect(() => {
@@ -147,17 +159,17 @@ export default function ImportPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
+    setSubmitError(null);
     setSuccess(null);
 
     // Use validated URLs
     if (validation.validCount === 0) {
-      setError('Please enter at least one valid URL');
+      setSubmitError('Please enter at least one valid URL');
       return;
     }
 
     if (validation.validCount > 20) {
-      setError('Maximum 20 URLs per request');
+      setSubmitError('Maximum 20 URLs per request');
       return;
     }
 
@@ -181,7 +193,7 @@ export default function ImportPage() {
         });
 
         if (res.errors && res.errors.length > 0) {
-          setError(`Warnings: ${res.errors.join(', ')}`);
+          setSubmitError(`Warnings: ${res.errors.join(', ')}`);
         }
 
         setSuccess(`Created batch run with ${res.items_count} item(s). Redirecting...`);
@@ -198,7 +210,7 @@ export default function ImportPage() {
         });
 
         if (res.errors && res.errors.length > 0) {
-          setError(`Warnings: ${res.errors.join(', ')}`);
+          setSubmitError(`Warnings: ${res.errors.join(', ')}`);
         }
 
         setSuccess(`Created import. Processing...`);
@@ -212,7 +224,7 @@ export default function ImportPage() {
         }
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create imports');
+      setSubmitError(err instanceof Error ? err.message : 'Failed to create imports');
     } finally {
       setIsSubmitting(false);
     }
@@ -221,7 +233,7 @@ export default function ImportPage() {
   const handleRetryFailed = async () => {
     const failedImports = imports.filter(imp => imp.status === 'failed');
     if (failedImports.length === 0) {
-      setError('No failed imports to retry');
+      setSubmitError('No failed imports to retry');
       return;
     }
 
@@ -236,7 +248,7 @@ export default function ImportPage() {
       setSuccess(`Retrying ${res.imports.length} failed import(s)`);
       fetchImports();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to retry imports');
+      setSubmitError(err instanceof Error ? err.message : 'Failed to retry imports');
     } finally {
       setIsSubmitting(false);
     }
@@ -403,10 +415,10 @@ export default function ImportPage() {
                 </div>
               </div>
 
-              {error && (
+              {submitError && (
                 <div className="mb-4 p-4 bg-red-50 text-red-700 rounded-lg flex items-start">
                   <XCircle className="h-5 w-5 mr-2 flex-shrink-0 mt-0.5" />
-                  {error}
+                  {submitError}
                 </div>
               )}
 
@@ -463,7 +475,13 @@ export default function ImportPage() {
               </div>
             </div>
 
-            {isLoading && imports.length === 0 ? (
+            {loadError ? (
+              <ApiErrorCard
+                error={loadError}
+                onRetry={handleRetryLoad}
+                isRetrying={isRetrying}
+              />
+            ) : isLoading && imports.length === 0 ? (
               <SkeletonTable rows={5} columns={7} />
             ) : imports.length === 0 ? (
               <div className="text-center py-12">

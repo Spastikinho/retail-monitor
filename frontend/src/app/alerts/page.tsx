@@ -1,20 +1,24 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Bell, CheckCircle, Clock } from 'lucide-react';
+import { Bell, CheckCircle, Clock, RefreshCw } from 'lucide-react';
 import { Sidebar } from '@/components/Sidebar';
 import { DataTable } from '@/components/DataTable';
 import { Button } from '@/components/Button';
+import { ApiErrorCard, createApiErrorInfo, logApiError, ApiErrorInfo } from '@/components/ApiErrorCard';
 import { api, AlertEvent } from '@/lib/api';
 import { format } from 'date-fns';
 
 export default function AlertsPage() {
   const [alerts, setAlerts] = useState<AlertEvent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<ApiErrorInfo | null>(null);
+  const [isRetrying, setIsRetrying] = useState(false);
   const [filter, setFilter] = useState<'all' | 'pending' | 'delivered'>('all');
 
   const fetchAlerts = async () => {
     setIsLoading(true);
+    setError(null);
     try {
       const params: { delivered?: boolean } = {};
       if (filter === 'pending') params.delivered = false;
@@ -22,11 +26,19 @@ export default function AlertsPage() {
 
       const res = await api.getAlerts({ ...params, limit: 100 });
       setAlerts(res.events);
-    } catch (error) {
-      console.error('Failed to fetch alerts:', error);
+    } catch (err) {
+      const errorInfo = createApiErrorInfo('Loading alerts', err, '/api/v1/alerts/');
+      logApiError(errorInfo);
+      setError(errorInfo);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleRetry = async () => {
+    setIsRetrying(true);
+    await fetchAlerts();
+    setIsRetrying(false);
   };
 
   useEffect(() => {
@@ -103,10 +115,25 @@ export default function AlertsPage() {
 
       <main className="flex-1 overflow-auto">
         <div className="p-8">
-          <div className="mb-8">
-            <h1 className="text-2xl font-bold text-gray-900">Alerts</h1>
-            <p className="text-gray-500">Monitor price changes and notifications</p>
+          <div className="mb-8 flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Alerts</h1>
+              <p className="text-gray-500">Monitor price changes and notifications</p>
+            </div>
+            <Button icon={RefreshCw} onClick={handleRetry} isLoading={isLoading}>
+              Refresh
+            </Button>
           </div>
+
+          {error && (
+            <div className="mb-6">
+              <ApiErrorCard
+                error={error}
+                onRetry={handleRetry}
+                isRetrying={isRetrying}
+              />
+            </div>
+          )}
 
           <div className="mb-6 flex gap-2">
             <Button

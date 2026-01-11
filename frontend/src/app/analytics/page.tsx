@@ -1,27 +1,41 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { BarChart3, TrendingUp, Package, Store } from 'lucide-react';
+import { BarChart3, TrendingUp, Package, Store, RefreshCw } from 'lucide-react';
 import { Sidebar } from '@/components/Sidebar';
 import { StatsCard } from '@/components/StatsCard';
+import { Button } from '@/components/Button';
+import { ApiErrorCard, createApiErrorInfo, logApiError, ApiErrorInfo } from '@/components/ApiErrorCard';
 import { api, AnalyticsSummary } from '@/lib/api';
 
 export default function AnalyticsPage() {
   const [summary, setSummary] = useState<AnalyticsSummary | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<ApiErrorInfo | null>(null);
+  const [isRetrying, setIsRetrying] = useState(false);
+
+  const fetchSummary = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const res = await api.getAnalyticsSummary();
+      setSummary(res.summary);
+    } catch (err) {
+      const errorInfo = createApiErrorInfo('Loading analytics', err, '/api/v1/analytics/summary/');
+      logApiError(errorInfo);
+      setError(errorInfo);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleRetry = async () => {
+    setIsRetrying(true);
+    await fetchSummary();
+    setIsRetrying(false);
+  };
 
   useEffect(() => {
-    const fetchSummary = async () => {
-      try {
-        const res = await api.getAnalyticsSummary();
-        setSummary(res.summary);
-      } catch (error) {
-        console.error('Failed to fetch analytics:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
     fetchSummary();
   }, []);
 
@@ -31,10 +45,25 @@ export default function AnalyticsPage() {
 
       <main className="flex-1 overflow-auto">
         <div className="p-8">
-          <div className="mb-8">
-            <h1 className="text-2xl font-bold text-gray-900">Analytics</h1>
-            <p className="text-gray-500">Insights and statistics</p>
+          <div className="mb-8 flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Analytics</h1>
+              <p className="text-gray-500">Insights and statistics</p>
+            </div>
+            <Button icon={RefreshCw} onClick={handleRetry} isLoading={isLoading}>
+              Refresh
+            </Button>
           </div>
+
+          {error && (
+            <div className="mb-6">
+              <ApiErrorCard
+                error={error}
+                onRetry={handleRetry}
+                isRetrying={isRetrying}
+              />
+            </div>
+          )}
 
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
@@ -146,9 +175,9 @@ export default function AnalyticsPage() {
                 </div>
               </div>
             </>
-          ) : (
-            <p className="text-gray-500">Failed to load analytics data</p>
-          )}
+          ) : !error ? (
+            <p className="text-gray-500">No analytics data available</p>
+          ) : null}
         </div>
       </main>
     </div>

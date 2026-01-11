@@ -17,6 +17,7 @@ import {
 import { Sidebar } from '@/components/Sidebar';
 import { Button } from '@/components/Button';
 import { SkeletonImportDetail, Skeleton } from '@/components/Skeleton';
+import { ApiErrorCard, createApiErrorInfo, logApiError, ApiErrorInfo } from '@/components/ApiErrorCard';
 import { api, ManualImportDetail } from '@/lib/api';
 import { usePolling } from '@/lib/use-polling';
 
@@ -29,8 +30,9 @@ export default function ImportDetailPage() {
 
   const [importData, setImportData] = useState<ManualImportDetail | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ApiErrorInfo | null>(null);
   const [isRetrying, setIsRetrying] = useState(false);
+  const [isReloading, setIsReloading] = useState(false);
 
   const fetchImport = useCallback(async () => {
     const res = await api.getImport(importId);
@@ -59,14 +61,31 @@ export default function ImportDetailPage() {
         const data = await fetchImport();
         setImportData(data);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load import');
+        const errorInfo = createApiErrorInfo('Loading import details', err, `/api/v1/imports/${importId}/`);
+        logApiError(errorInfo);
+        setError(errorInfo);
       } finally {
         setIsLoading(false);
       }
     };
 
     loadImport();
-  }, [fetchImport]);
+  }, [fetchImport, importId]);
+
+  const handleReload = async () => {
+    setIsReloading(true);
+    setError(null);
+    try {
+      const data = await fetchImport();
+      setImportData(data);
+    } catch (err) {
+      const errorInfo = createApiErrorInfo('Loading import details', err, `/api/v1/imports/${importId}/`);
+      logApiError(errorInfo);
+      setError(errorInfo);
+    } finally {
+      setIsReloading(false);
+    }
+  };
 
   // Update from polling
   useEffect(() => {
@@ -92,7 +111,9 @@ export default function ImportDetailPage() {
         router.push(`/import/${res.imports[0].id}`);
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to retry');
+      const errorInfo = createApiErrorInfo('Retrying import', err, '/api/v1/imports/create/');
+      logApiError(errorInfo);
+      setError(errorInfo);
     } finally {
       setIsRetrying(false);
     }
@@ -164,22 +185,11 @@ export default function ImportDetailPage() {
 
           {/* Error State */}
           {error && !isLoading && (
-            <div className="rounded-xl bg-red-50 p-6 border border-red-200">
-              <div className="flex items-center space-x-3">
-                <AlertTriangle className="h-6 w-6 text-red-500" />
-                <div>
-                  <h3 className="font-medium text-red-800">Error loading import</h3>
-                  <p className="text-red-600">{error}</p>
-                </div>
-              </div>
-              <Button
-                variant="secondary"
-                className="mt-4"
-                onClick={() => window.location.reload()}
-              >
-                Try Again
-              </Button>
-            </div>
+            <ApiErrorCard
+              error={error}
+              onRetry={handleReload}
+              isRetrying={isReloading}
+            />
           )}
 
           {/* Content */}

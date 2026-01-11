@@ -4,12 +4,16 @@ import { useState, useEffect } from 'react';
 import { RefreshCw, Play, CheckCircle, XCircle, Clock } from 'lucide-react';
 import { Sidebar } from '@/components/Sidebar';
 import { Button } from '@/components/Button';
+import { ApiErrorCard, createApiErrorInfo, logApiError, ApiErrorInfo } from '@/components/ApiErrorCard';
 import { api, Retailer } from '@/lib/api';
 
 export default function ScrapingPage() {
   const [retailers, setRetailers] = useState<Retailer[]>([]);
   const [selectedRetailer, setSelectedRetailer] = useState<string>('');
+  const [isLoading, setIsLoading] = useState(true);
   const [isStarting, setIsStarting] = useState(false);
+  const [error, setError] = useState<ApiErrorInfo | null>(null);
+  const [isRetrying, setIsRetrying] = useState(false);
   const [lastSession, setLastSession] = useState<{
     id: string;
     status: string;
@@ -19,16 +23,28 @@ export default function ScrapingPage() {
   } | null>(null);
   const [message, setMessage] = useState('');
 
-  useEffect(() => {
-    const fetchRetailers = async () => {
-      try {
-        const res = await api.getRetailers();
-        setRetailers(res.retailers);
-      } catch (error) {
-        console.error('Failed to fetch retailers:', error);
-      }
-    };
+  const fetchRetailers = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const res = await api.getRetailers();
+      setRetailers(res.retailers);
+    } catch (err) {
+      const errorInfo = createApiErrorInfo('Loading retailers', err, '/api/v1/retailers/');
+      logApiError(errorInfo);
+      setError(errorInfo);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
+  const handleRetry = async () => {
+    setIsRetrying(true);
+    await fetchRetailers();
+    setIsRetrying(false);
+  };
+
+  useEffect(() => {
     fetchRetailers();
   }, []);
 
@@ -80,10 +96,25 @@ export default function ScrapingPage() {
 
       <main className="flex-1 overflow-auto">
         <div className="p-8">
-          <div className="mb-8">
-            <h1 className="text-2xl font-bold text-gray-900">Scraping</h1>
-            <p className="text-gray-500">Trigger and monitor scraping sessions</p>
+          <div className="mb-8 flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Scraping</h1>
+              <p className="text-gray-500">Trigger and monitor scraping sessions</p>
+            </div>
+            <Button icon={RefreshCw} onClick={handleRetry} isLoading={isLoading}>
+              Refresh
+            </Button>
           </div>
+
+          {error && (
+            <div className="mb-6">
+              <ApiErrorCard
+                error={error}
+                onRetry={handleRetry}
+                isRetrying={isRetrying}
+              />
+            </div>
+          )}
 
           <div className="mb-8 rounded-xl bg-white p-6 shadow-sm border border-gray-100">
             <h2 className="mb-4 text-lg font-semibold text-gray-900">

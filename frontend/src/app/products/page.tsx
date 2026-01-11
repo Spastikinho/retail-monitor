@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search, Filter, Package } from 'lucide-react';
+import { Search, Filter, Package, RefreshCw } from 'lucide-react';
 import { Sidebar } from '@/components/Sidebar';
 import { DataTable } from '@/components/DataTable';
 import { Button } from '@/components/Button';
+import { ApiErrorCard, createApiErrorInfo, logApiError, ApiErrorInfo } from '@/components/ApiErrorCard';
 import { api, Product } from '@/lib/api';
 
 export default function ProductsPage() {
@@ -13,11 +14,14 @@ export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [total, setTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<ApiErrorInfo | null>(null);
+  const [isRetrying, setIsRetrying] = useState(false);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'all' | 'own' | 'competitors'>('all');
 
   const fetchProducts = async () => {
     setIsLoading(true);
+    setError(null);
     try {
       const params: { search?: string; is_own?: boolean } = {};
       if (search) params.search = search;
@@ -27,11 +31,19 @@ export default function ProductsPage() {
       const res = await api.getProducts(params);
       setProducts(res.products);
       setTotal(res.total);
-    } catch (error) {
-      console.error('Failed to fetch products:', error);
+    } catch (err) {
+      const errorInfo = createApiErrorInfo('Loading products', err, '/api/v1/products/');
+      logApiError(errorInfo);
+      setError(errorInfo);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleRetry = async () => {
+    setIsRetrying(true);
+    await fetchProducts();
+    setIsRetrying(false);
   };
 
   useEffect(() => {
@@ -137,6 +149,16 @@ export default function ProductsPage() {
               </Button>
             </div>
           </div>
+
+          {error && (
+            <div className="mb-6">
+              <ApiErrorCard
+                error={error}
+                onRetry={handleRetry}
+                isRetrying={isRetrying}
+              />
+            </div>
+          )}
 
           <div className="rounded-xl bg-white shadow-sm border border-gray-100">
             <DataTable

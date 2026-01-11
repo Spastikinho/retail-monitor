@@ -1,27 +1,41 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Store, ExternalLink } from 'lucide-react';
+import { Store, ExternalLink, RefreshCw } from 'lucide-react';
 import { Sidebar } from '@/components/Sidebar';
 import { DataTable } from '@/components/DataTable';
+import { Button } from '@/components/Button';
+import { ApiErrorCard, createApiErrorInfo, logApiError, ApiErrorInfo } from '@/components/ApiErrorCard';
 import { api, Retailer } from '@/lib/api';
 
 export default function RetailersPage() {
   const [retailers, setRetailers] = useState<Retailer[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<ApiErrorInfo | null>(null);
+  const [isRetrying, setIsRetrying] = useState(false);
+
+  const fetchRetailers = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const res = await api.getRetailers();
+      setRetailers(res.retailers);
+    } catch (err) {
+      const errorInfo = createApiErrorInfo('Loading retailers', err, '/api/v1/retailers/');
+      logApiError(errorInfo);
+      setError(errorInfo);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleRetry = async () => {
+    setIsRetrying(true);
+    await fetchRetailers();
+    setIsRetrying(false);
+  };
 
   useEffect(() => {
-    const fetchRetailers = async () => {
-      try {
-        const res = await api.getRetailers();
-        setRetailers(res.retailers);
-      } catch (error) {
-        console.error('Failed to fetch retailers:', error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
     fetchRetailers();
   }, []);
 
@@ -65,12 +79,27 @@ export default function RetailersPage() {
 
       <main className="flex-1 overflow-auto">
         <div className="p-8">
-          <div className="mb-8">
-            <h1 className="text-2xl font-bold text-gray-900">Retailers</h1>
-            <p className="text-gray-500">
-              Manage monitored retailers ({retailers.length} active)
-            </p>
+          <div className="mb-8 flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Retailers</h1>
+              <p className="text-gray-500">
+                Manage monitored retailers ({retailers.length} active)
+              </p>
+            </div>
+            <Button icon={RefreshCw} onClick={handleRetry} isLoading={isLoading}>
+              Refresh
+            </Button>
           </div>
+
+          {error && (
+            <div className="mb-6">
+              <ApiErrorCard
+                error={error}
+                onRetry={handleRetry}
+                isRetrying={isRetrying}
+              />
+            </div>
+          )}
 
           <div className="rounded-xl bg-white shadow-sm border border-gray-100">
             <DataTable

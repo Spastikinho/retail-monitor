@@ -4,13 +4,14 @@ import { useEffect, useState } from 'react';
 import { FolderPlus, Folder, Package, Users, Plus } from 'lucide-react';
 import { Sidebar } from '@/components/Sidebar';
 import { Button } from '@/components/Button';
+import { ApiErrorCard, createApiErrorInfo, logApiError, ApiErrorInfo } from '@/components/ApiErrorCard';
 import { api, MonitoringGroup, ManualImport } from '@/lib/api';
 
 export default function MonitoringPage() {
   const [groups, setGroups] = useState<MonitoringGroup[]>([]);
   const [imports, setImports] = useState<ManualImport[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ApiErrorInfo | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [newGroup, setNewGroup] = useState({
     name: '',
@@ -19,9 +20,11 @@ export default function MonitoringPage() {
     color: '#3B82F6',
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isRetrying, setIsRetrying] = useState(false);
 
   const fetchData = async () => {
     setIsLoading(true);
+    setError(null);
     try {
       const [groupsRes, importsRes] = await Promise.all([
         api.getGroups(),
@@ -30,10 +33,18 @@ export default function MonitoringPage() {
       setGroups(groupsRes.groups);
       setImports(importsRes.imports);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load data');
+      const errorInfo = createApiErrorInfo('Loading monitoring data', err, '/api/v1/groups/');
+      logApiError(errorInfo);
+      setError(errorInfo);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleRetry = async () => {
+    setIsRetrying(true);
+    await fetchData();
+    setIsRetrying(false);
   };
 
   useEffect(() => {
@@ -51,7 +62,9 @@ export default function MonitoringPage() {
       setShowCreateForm(false);
       fetchData();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create group');
+      const errorInfo = createApiErrorInfo('Creating monitoring group', err, '/api/v1/groups/create/');
+      logApiError(errorInfo);
+      setError(errorInfo);
     } finally {
       setIsSubmitting(false);
     }
@@ -79,8 +92,12 @@ export default function MonitoringPage() {
           </div>
 
           {error && (
-            <div className="mb-6 p-4 bg-red-50 text-red-700 rounded-lg">
-              {error}
+            <div className="mb-6">
+              <ApiErrorCard
+                error={error}
+                onRetry={handleRetry}
+                isRetrying={isRetrying}
+              />
             </div>
           )}
 

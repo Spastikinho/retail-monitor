@@ -5,13 +5,15 @@ import { Package, Store, Bell, Activity, RefreshCw, Camera } from 'lucide-react'
 import { Sidebar } from '@/components/Sidebar';
 import { StatsCard } from '@/components/StatsCard';
 import { Button } from '@/components/Button';
+import { ApiErrorCard, createApiErrorInfo, logApiError, ApiErrorInfo } from '@/components/ApiErrorCard';
 import { api, AnalyticsSummary, AlertEvent } from '@/lib/api';
 
 export default function Dashboard() {
   const [summary, setSummary] = useState<AnalyticsSummary | null>(null);
   const [recentAlerts, setRecentAlerts] = useState<AlertEvent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ApiErrorInfo | null>(null);
+  const [isRetrying, setIsRetrying] = useState(false);
 
   const fetchData = async () => {
     setIsLoading(true);
@@ -24,10 +26,18 @@ export default function Dashboard() {
       setSummary(summaryRes.summary);
       setRecentAlerts(alertsRes.events);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load dashboard');
+      const errorInfo = createApiErrorInfo('Loading dashboard data', err, '/api/v1/analytics/summary/');
+      logApiError(errorInfo);
+      setError(errorInfo);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleRetry = async () => {
+    setIsRetrying(true);
+    await fetchData();
+    setIsRetrying(false);
   };
 
   useEffect(() => {
@@ -51,8 +61,12 @@ export default function Dashboard() {
           </div>
 
           {error && (
-            <div className="mb-6 rounded-lg bg-red-50 p-4 text-red-700">
-              {error}
+            <div className="mb-6">
+              <ApiErrorCard
+                error={error}
+                onRetry={handleRetry}
+                isRetrying={isRetrying}
+              />
             </div>
           )}
 

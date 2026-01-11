@@ -1,9 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Download, FileSpreadsheet, Calendar, Package } from 'lucide-react';
+import { Download, FileSpreadsheet, Calendar, Package, RefreshCw } from 'lucide-react';
 import { Sidebar } from '@/components/Sidebar';
 import { Button } from '@/components/Button';
+import { ApiErrorCard, createApiErrorInfo, logApiError, ApiErrorInfo } from '@/components/ApiErrorCard';
 import { api, MonitoringPeriod, ManualImport } from '@/lib/api';
 
 export default function ExportPage() {
@@ -11,28 +12,38 @@ export default function ExportPage() {
   const [selectedPeriod, setSelectedPeriod] = useState<string>('');
   const [imports, setImports] = useState<ManualImport[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ApiErrorInfo | null>(null);
+  const [isRetrying, setIsRetrying] = useState(false);
+
+  const fetchData = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const [periodsRes, importsRes] = await Promise.all([
+        api.getPeriods(),
+        api.getImports({ status: 'completed', limit: 100 }),
+      ]);
+      setPeriods(periodsRes.periods);
+      setImports(importsRes.imports);
+      if (periodsRes.periods.length > 0) {
+        setSelectedPeriod(periodsRes.periods[0].period);
+      }
+    } catch (err) {
+      const errorInfo = createApiErrorInfo('Loading export data', err, '/api/v1/periods/');
+      logApiError(errorInfo);
+      setError(errorInfo);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleRetry = async () => {
+    setIsRetrying(true);
+    await fetchData();
+    setIsRetrying(false);
+  };
 
   useEffect(() => {
-    const fetchData = async () => {
-      setIsLoading(true);
-      try {
-        const [periodsRes, importsRes] = await Promise.all([
-          api.getPeriods(),
-          api.getImports({ status: 'completed', limit: 100 }),
-        ]);
-        setPeriods(periodsRes.periods);
-        setImports(importsRes.imports);
-        if (periodsRes.periods.length > 0) {
-          setSelectedPeriod(periodsRes.periods[0].period);
-        }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load data');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
     fetchData();
   }, []);
 
@@ -60,14 +71,23 @@ export default function ExportPage() {
 
       <main className="flex-1 overflow-auto">
         <div className="p-8">
-          <div className="mb-8">
-            <h1 className="text-2xl font-bold text-gray-900">Export Data</h1>
-            <p className="text-gray-500">Download monitoring data as Excel spreadsheets</p>
+          <div className="mb-8 flex items-center justify-between">
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">Export Data</h1>
+              <p className="text-gray-500">Download monitoring data as Excel spreadsheets</p>
+            </div>
+            <Button icon={RefreshCw} onClick={handleRetry} isLoading={isLoading}>
+              Refresh
+            </Button>
           </div>
 
           {error && (
-            <div className="mb-6 p-4 bg-red-50 text-red-700 rounded-lg">
-              {error}
+            <div className="mb-6">
+              <ApiErrorCard
+                error={error}
+                onRetry={handleRetry}
+                isRetrying={isRetrying}
+              />
             </div>
           )}
 

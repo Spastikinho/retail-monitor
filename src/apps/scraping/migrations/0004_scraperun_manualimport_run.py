@@ -10,7 +10,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         migrations.swappable_dependency(settings.AUTH_USER_MODEL),
-        ('scraping', '0002_manualimport_reviews_and_analysis'),
+        ('scraping', '0003_add_monitoring_features'),
     ]
 
     operations = [

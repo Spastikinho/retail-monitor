@@ -4,12 +4,6 @@
   "buildCommand": "npm run build",
   "installCommand": "npm ci",
   "outputDirectory": ".next",
-  "rewrites": [
-    {
-      "source": "/api/:path*",
-      "destination": "https://web-production-9f63.up.railway.app/api/:path*"
-    }
-  ],
   "headers": [
     {
       "source": "/(.*)",
@@ -30,4 +24,3 @@
     }
   ]
 }
-

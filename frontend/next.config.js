@@ -2,23 +2,29 @@
 const nextConfig = {
   output: 'standalone',
 
+  // Disable trailing slash normalization to prevent redirect loops
+  skipTrailingSlashRedirect: true,
+
   // Environment-aware API URL
   env: {
     NEXT_PUBLIC_API_URL: process.env.NEXT_PUBLIC_API_URL || 'https://web-production-9f63.up.railway.app',
   },
 
-  // Rewrites for local development - production uses vercel.json rewrites
+  // Rewrites - use beforeFiles to ensure they run before Next.js routing
   async rewrites() {
-    if (process.env.NODE_ENV === 'development') {
-      return [
+    const railwayUrl = process.env.NEXT_PUBLIC_API_URL || 'https://web-production-9f63.up.railway.app';
+
+    return {
+      beforeFiles: [
+        // Proxy all /api/v1/* requests to Railway backend
         {
-          source: '/api/:path*',
-          destination: `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'}/api/:path*`,
+          source: '/api/v1/:path*',
+          destination: `${railwayUrl}/api/v1/:path*`,
         },
-      ];
-    }
-    // Production rewrites handled by vercel.json
-    return [];
+      ],
+      afterFiles: [],
+      fallback: [],
+    };
   },
 };
 

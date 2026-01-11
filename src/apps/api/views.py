@@ -799,10 +799,8 @@ def import_urls(request):
             except MonitoringGroup.DoesNotExist:
                 pass
 
-        # Get authenticated user (required for imports)
+        # Get authenticated user (optional - may be None for anonymous imports)
         user = get_api_user(request)
-        if not user:
-            return api_error('Authentication required to create imports', 401)
 
         created_imports = []
         errors = []

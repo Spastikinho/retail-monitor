@@ -441,9 +441,11 @@ class ManualImport(BaseModel):
 
     user = models.ForeignKey(
         User,
-        on_delete=models.CASCADE,
+        on_delete=models.SET_NULL,
         related_name='manual_imports',
         verbose_name='Пользователь',
+        null=True,
+        blank=True,
     )
     url = models.URLField('URL товара', max_length=2000)
     retailer = models.ForeignKey(

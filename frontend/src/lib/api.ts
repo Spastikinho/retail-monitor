@@ -1,26 +1,63 @@
 /**
  * API Client for Retail Monitor
+ * ==============================
  *
- * Connectivity model:
- * - Production: Vercel rewrites proxy /api/* to Railway backend (same-origin, no CORS)
- * - Development: Direct calls to NEXT_PUBLIC_API_URL (default: http://localhost:8000)
+ * SINGLE SOURCE OF TRUTH for all API calls.
  *
- * All API calls use relative paths (/api/v1/...) which work in both environments.
+ * Architecture:
+ * - Browser (client-side): Always uses relative paths /api/v1/*
+ *   These are proxied by Next.js route handler to Railway backend
+ * - Server-side (SSR/build): Uses NEXT_PUBLIC_API_URL directly
+ *
+ * This ensures:
+ * - No CORS issues (same-origin requests in browser)
+ * - Works in production, preview, and local development
+ * - Single configuration point
  */
 
-// For SSR/build time, we need the full URL. For client-side, relative paths work via proxy.
-const getApiBase = (): string => {
-  // Server-side rendering or build time - need full URL
-  if (typeof window === 'undefined') {
-    return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-  }
-  // Client-side in production - use relative paths (Vercel proxies to Railway)
-  if (process.env.NODE_ENV === 'production') {
+// ============================================================================
+// Configuration
+// ============================================================================
+
+/**
+ * Get the API base URL.
+ * - Browser: Always empty string (use relative paths via proxy)
+ * - Server: Use configured URL or default
+ */
+export function getApiBase(): string {
+  // Client-side: ALWAYS use relative paths
+  // The proxy route at /api/v1/[...path] handles forwarding to backend
+  if (typeof window !== 'undefined') {
     return '';
   }
-  // Client-side in development - use configured URL or localhost
-  return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
-};
+
+  // Server-side (SSR, API routes, build time): Need absolute URL
+  return process.env.NEXT_PUBLIC_API_URL || 'https://web-production-9f63.up.railway.app';
+}
+
+/**
+ * Get configuration info for display in settings/smoke pages
+ */
+export function getApiConfig(): {
+  mode: 'proxy' | 'direct';
+  browserPath: string;
+  backendUrl: string;
+  isConfigured: boolean;
+} {
+  const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'https://web-production-9f63.up.railway.app';
+  const isClient = typeof window !== 'undefined';
+
+  return {
+    mode: isClient ? 'proxy' : 'direct',
+    browserPath: '/api/v1/*',
+    backendUrl,
+    isConfigured: !!backendUrl,
+  };
+}
+
+// ============================================================================
+// Request Helpers
+// ============================================================================
 
 interface RequestOptions extends RequestInit {
   params?: Record<string, string | number | boolean | undefined>;
@@ -36,12 +73,20 @@ export class ApiError extends Error {
     this.details = details;
     this.name = 'ApiError';
   }
+
+  /**
+   * Check if this is a configuration error (backend not reachable)
+   */
+  isConfigurationError(): boolean {
+    return this.status === 502 || this.status === 503;
+  }
 }
 
 async function request<T>(endpoint: string, options: RequestOptions = {}): Promise<T> {
   const { params, ...fetchOptions } = options;
   const apiBase = getApiBase();
 
+  // Build URL - endpoint should start with / and end with /
   let url = `${apiBase}/api/v1${endpoint}`;
 
   if (params) {
@@ -63,7 +108,6 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
       'Content-Type': 'application/json',
       ...fetchOptions.headers,
     },
-    // Include credentials for session-based auth
     credentials: 'include',
   });
 
@@ -79,17 +123,32 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
   return response.json();
 }
 
-/**
- * Raw health check that returns the full response for status checking
- */
-export async function checkBackendHealth(): Promise<{
+// ============================================================================
+// Health Check (with detailed diagnostics)
+// ============================================================================
+
+export interface HealthCheckResult {
   ok: boolean;
   status: number;
-  data?: { status: string; checks?: Record<string, string> };
+  data?: {
+    status: string;
+    database?: string;
+    timestamp?: string;
+    checks?: Record<string, string>;
+  };
   error?: string;
   latencyMs: number;
-}> {
+  configurationError?: boolean;
+  backendUrl?: string;
+}
+
+/**
+ * Check backend health with full diagnostics.
+ * Uses the same path the app uses in production.
+ */
+export async function checkBackendHealth(): Promise<HealthCheckResult> {
   const apiBase = getApiBase();
+  const config = getApiConfig();
   const start = Date.now();
 
   try {
@@ -103,15 +162,35 @@ export async function checkBackendHealth(): Promise<{
 
     if (response.ok) {
       const data = await response.json();
-      return { ok: true, status: response.status, data, latencyMs };
-    } else {
+      return {
+        ok: true,
+        status: response.status,
+        data,
+        latencyMs,
+        backendUrl: config.backendUrl,
+      };
+    }
+
+    // Check for configuration errors from proxy
+    if (response.status === 502 || response.status === 503) {
+      const errorData = await response.json().catch(() => ({}));
       return {
         ok: false,
         status: response.status,
-        error: `HTTP ${response.status}`,
-        latencyMs
+        error: errorData.error || `HTTP ${response.status}`,
+        latencyMs,
+        configurationError: true,
+        backendUrl: errorData.backend_configured || config.backendUrl,
       };
     }
+
+    return {
+      ok: false,
+      status: response.status,
+      error: `HTTP ${response.status}`,
+      latencyMs,
+      backendUrl: config.backendUrl,
+    };
   } catch (error) {
     const latencyMs = Date.now() - start;
     return {
@@ -119,6 +198,8 @@ export async function checkBackendHealth(): Promise<{
       status: 0,
       error: error instanceof Error ? error.message : 'Connection failed',
       latencyMs,
+      configurationError: true,
+      backendUrl: config.backendUrl,
     };
   }
 }
@@ -278,7 +359,7 @@ export interface MonitoringPeriod {
   count: number;
 }
 
-// Run types (Phase 3 spec compliant)
+// Run types
 export interface RunProgress {
   total: number;
   completed: number;
@@ -427,8 +508,7 @@ export const api = {
   getPeriods: () =>
     request<{ success: boolean; periods: MonitoringPeriod[] }>('/periods/'),
 
-  // Excel Export URLs - these need to go through the proxy too
-  // Returns relative URLs that work via Vercel proxy
+  // Excel Export URLs - relative paths work via proxy
   getExportMonitoringUrl: (period?: string) => {
     const base = '/api/v1/export/monitoring/';
     return period ? `${base}?period=${period}` : base;
@@ -437,7 +517,7 @@ export const api = {
   getExportImportUrl: (importId: string) =>
     `/api/v1/export/import/${importId}/`,
 
-  // Runs API (Phase 3 spec compliant)
+  // Runs API
   createRun: (data: { urls: string[]; product_type?: string; group_id?: string }) =>
     request<CreateRunResponse>(
       '/runs/',

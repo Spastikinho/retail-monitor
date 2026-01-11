@@ -1,22 +1,15 @@
 'use client';
 
 import { useState } from 'react';
-import { Settings, Server, RefreshCw, CheckCircle, XCircle, Globe, Code, Zap } from 'lucide-react';
+import { Settings, Server, RefreshCw, CheckCircle, XCircle, Globe, Code, Zap, AlertTriangle } from 'lucide-react';
 import { Sidebar } from '@/components/Sidebar';
 import { Button } from '@/components/Button';
-import { checkBackendHealth } from '@/lib/api';
-
-interface HealthResult {
-  ok: boolean;
-  status: number;
-  data?: { status: string; checks?: Record<string, string> };
-  error?: string;
-  latencyMs: number;
-}
+import { checkBackendHealth, getApiConfig, HealthCheckResult } from '@/lib/api';
 
 export default function SettingsPage() {
-  const [healthResult, setHealthResult] = useState<HealthResult | null>(null);
+  const [healthResult, setHealthResult] = useState<HealthCheckResult | null>(null);
   const [isTesting, setIsTesting] = useState(false);
+  const config = getApiConfig();
 
   const testBackend = async () => {
     setIsTesting(true);
@@ -30,6 +23,7 @@ export default function SettingsPage() {
         status: 0,
         error: err instanceof Error ? err.message : 'Unknown error',
         latencyMs: 0,
+        configurationError: true,
       });
     } finally {
       setIsTesting(false);
@@ -37,9 +31,6 @@ export default function SettingsPage() {
   };
 
   // Environment info
-  const environment = process.env.NODE_ENV;
-  const isProduction = environment === 'production';
-  const apiMode = isProduction ? 'Proxy via /api/v1/* → Railway' : 'Direct to NEXT_PUBLIC_API_URL';
   const commitSha = process.env.NEXT_PUBLIC_VERCEL_GIT_COMMIT_SHA?.slice(0, 7) || 'dev';
   const vercelEnv = process.env.NEXT_PUBLIC_VERCEL_ENV || 'local';
 
@@ -73,7 +64,7 @@ export default function SettingsPage() {
               <div className="p-6 space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <p className="text-sm text-gray-500">Environment</p>
+                    <p className="text-sm text-gray-500">Vercel Environment</p>
                     <p className="font-medium text-gray-900 flex items-center gap-2">
                       <span className={`inline-block w-2 h-2 rounded-full ${
                         vercelEnv === 'production' ? 'bg-green-500' :
@@ -84,10 +75,10 @@ export default function SettingsPage() {
                   </div>
                   <div>
                     <p className="text-sm text-gray-500">Node Environment</p>
-                    <p className="font-medium text-gray-900">{environment}</p>
+                    <p className="font-medium text-gray-900">{process.env.NODE_ENV}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-gray-500">Commit</p>
+                    <p className="text-sm text-gray-500">Git Commit</p>
                     <p className="font-mono text-sm text-gray-900">{commitSha}</p>
                   </div>
                   <div>
@@ -109,19 +100,25 @@ export default function SettingsPage() {
                 </h2>
               </div>
               <div className="p-6 space-y-4">
-                <div>
-                  <p className="text-sm text-gray-500">API Mode</p>
-                  <p className="font-medium text-gray-900">{apiMode}</p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-sm text-gray-500">API Mode</p>
+                    <p className="font-medium text-gray-900 capitalize">{config.mode}</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Browser Path</p>
+                    <p className="font-mono text-sm text-gray-900">{config.browserPath}</p>
+                  </div>
                 </div>
                 <div>
                   <p className="text-sm text-gray-500">Backend URL</p>
-                  <p className="font-mono text-sm text-gray-900 break-all">
-                    {process.env.NEXT_PUBLIC_API_URL || 'https://web-production-9f63.up.railway.app'}
-                  </p>
+                  <p className="font-mono text-sm text-gray-900 break-all">{config.backendUrl}</p>
                 </div>
-                <div>
-                  <p className="text-sm text-gray-500">Proxy Route</p>
-                  <p className="font-mono text-sm text-gray-900">/api/v1/* → Railway backend</p>
+                <div className="pt-2 border-t border-gray-100">
+                  <p className="text-xs text-gray-500">
+                    In production, browser requests to <code className="bg-gray-100 px-1 rounded">/api/v1/*</code> are
+                    proxied by Next.js to the Railway backend. This ensures same-origin requests with no CORS issues.
+                  </p>
                 </div>
               </div>
             </div>
@@ -162,7 +159,26 @@ export default function SettingsPage() {
                   )}
                 </div>
 
-                {healthResult && (
+                {/* Configuration Error Banner */}
+                {healthResult?.configurationError && (
+                  <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                    <div className="flex items-start gap-3">
+                      <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
+                      <div>
+                        <h3 className="font-semibold text-red-800">Configuration Error</h3>
+                        <p className="text-sm text-red-700 mt-1">
+                          Cannot reach the backend. Check that NEXT_PUBLIC_API_URL is set correctly in Vercel.
+                        </p>
+                        <div className="mt-2 text-xs font-mono text-red-600">
+                          <p>Configured URL: {healthResult.backendUrl}</p>
+                          <p>Error: {healthResult.error}</p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {healthResult && !healthResult.configurationError && (
                   <div className={`rounded-lg p-4 ${
                     healthResult.ok ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'
                   }`}>
@@ -174,7 +190,7 @@ export default function SettingsPage() {
 
                 {!healthResult && !isTesting && (
                   <p className="text-sm text-gray-500">
-                    Click the button above to test the backend connection through the same path used by the application.
+                    Click the button above to test the backend connection through the same proxy path used by the application.
                   </p>
                 )}
               </div>
@@ -191,7 +207,7 @@ export default function SettingsPage() {
               <div className="p-6">
                 <div className="flex flex-wrap gap-3">
                   <a
-                    href="/smoke"
+                    href="/smoke/"
                     className="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors text-sm font-medium"
                   >
                     System Health Check

@@ -457,5 +457,3 @@ export const api = {
   getSchema: () =>
     request<Record<string, unknown>>('/schema/'),
 };
-
-export { ApiError };
